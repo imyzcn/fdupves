@@ -1,0 +1,605 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+use Data::Dumper;
+use Getopt::Long;
+use File::Basename;
+use File::Copy;
+use File::Find;
+use File::Spec::Functions;
+use File::Path qw/make_path/;
+use Digest::SHA qw/sha1_hex/;
+
+use Image::Magick;
+
+# VIDEO file suffix
+my @av_suffix = (
+		 ".avi",
+		 ".rmvb",
+		 ".rm",
+		 ".mp4",
+		 ".mkv",
+		 ".3gp",
+		 ".flv",
+		 ".vob",
+		 ".wmv",
+		 ".mov",
+		 ".swf",
+		);
+
+# Global settings;
+my $recurse = 0;
+my $delete = 0;
+my $symlinks = 0;
+my $workpath = "~/.fdupves.d/cache";
+my $method = "auto";
+my $yes = 0;
+my $verbose = 0;
+my $player = 'mplayer';
+my $image_viewer = 'display';
+
+my $hash_width = 8;
+my $hash_height = 8;
+my $compare_count = 4;
+my $thumbnail = '512x384';
+
+my @video_timers = (
+		    [ 5, 15, 1 ],
+		    [ 10, 90, 3 ],
+		    [ 60, 600, 10 ],
+		    [ 480, 2400, 60 ],
+		    [ 1800, 28800, 120 ],
+		   );
+
+my %cache;
+my @same_files;
+
+my %imghash;
+
+# Script Starts here
+# First, parse global options
+my $result = GetOptions ("recurse" => \$recurse,
+			 "delete"   => \$delete,
+			 "symlinks" => \$symlinks,
+			 "C|workpath=s" => \$workpath,
+			 "yes" => \$yes,
+			 "method=s" => \$method,
+			 "verbose"  => \$verbose,
+			 "player=s" => \$player,
+			 "image_viewer=s" =>\$image_viewer,
+			 "help" => sub { &display_help; exit; },
+			);
+
+if ($method ne 'length'
+    && $method ne 'auto'
+    && $method ne 'manual') {
+  die "Method option is not set correctly";
+}
+
+my @dirs = File::Spec->splitdir ($workpath);
+if ($dirs[0] eq '~') {
+  shift @dirs;
+  $workpath = catdir ($ENV{HOME}, @dirs);
+}
+
+my $imghash_file = catfile ($workpath, "imghash.dat");
+# load img hash
+if (open FH, '<', $imghash_file) {
+  while (<FH>) {
+    chomp;
+    my ($key, $value) = split /\|\|\|\|/, $_;
+    $imghash{$key} = $value;
+  }
+  close FH;
+}
+
+for (@ARGV) {
+  $_ = File::Spec->rel2abs ($_) unless (file_name_is_absolute ($_));
+}
+find (\&find_filter, @ARGV);
+
+die "no enough av files to process" if (keys %cache < 2);
+
+if ($method eq 'length') {
+  &process_by_length;
+} elsif ($method eq 'auto') {
+  &process_auto;
+} elsif ($method eq 'manual') {
+  &process_manual;
+}
+
+for my $samefilesp (@same_files) {
+  printf "Same files: \n";
+  for my $id (1 .. @{$samefilesp}) {
+    printf "\t%d    %s\n", $id, $samefilesp->[$id - 1];
+  }
+  if ($delete) {
+    do {
+      printf "\nWhich one does you hope keep?[1->%d] or 'all'\n", @$samefilesp;
+      my $answer = <STDIN>;
+      chomp $answer;
+
+      next if ($answer =~ /a(ll)*/ && ($answer > @$samefilesp || $answer < 1));
+
+      if ($answer > 0 && $answer <= @$samefilesp) {
+	for my $id (1 .. @{$samefilesp}) {
+	  unlink $samefilesp->[$id] unless ($id == $answer);
+	}
+      }
+    } while (1);
+  }
+}
+
+# Save img hash and exit
+open FH, '>', $imghash_file;
+for (keys %imghash) {
+  my $str = join ('||||', $_, $imghash{$_}) . "\n";
+  print FH $str;
+}
+close FH;
+
+exit 0;
+
+sub process_by_length {
+  my @sort_list = sort {
+    $cache{$a}->{info}->{id_length}
+      <=> $cache{$b}->{info}->{id_length}
+    } keys %cache;
+
+  my $curid = 0;
+  for my $id (0 .. @sort_list - 2) {
+    next if ($id < $curid);
+
+    my $file = $sort_list[$id];
+    my @samefiles = ($file);
+
+    for my $nextid ($id + 1 .. @sort_list - 1) {
+      $curid = $nextid;
+
+      my $nextfile = $sort_list[$nextid];
+      if ($cache{$file}->{info}->{id_length} == $cache{$nextfile}->{info}->{id_length}) {
+	push @samefiles, $nextfile;
+      } else {
+	last;
+      }
+    }
+
+    if (@samefiles > 1) {
+      push @same_files, \@samefiles;
+    }
+  }
+}
+
+sub process_auto {
+  my $sort_group_files = &sort_img_by_similar;
+
+  for my $sort_files (@$sort_group_files) {
+    for my $file (@{$sort_files}) {
+      # break when hash distance >5
+      last if ($cache{$file}->{min_hash} > 5);
+
+      my $nextfile = $cache{$file}->{min_file};
+
+      my $shorter = $cache{$file}->{info}->{id_length};
+      $shorter = $cache{$nextfile}->{info}->{id_length} if ($cache{$nextfile}->{info}->{id_length}
+							    < $shorter);
+      my $interval = $shorter / ($compare_count);
+
+      my $equ = 1;
+      for (1 .. $compare_count - 1) {
+	my $ss = $cache{$file}->{min_chunk} + $_ * $interval;
+	$ss =
+	  $cache{$file}->{info}->{id_length}
+	    - $cache{$file}->{min_chunk}
+	      - $_ * $interval if ($cache{$file}->{min_type} == 1);
+
+	my $hasha = get_imghash ($file, $ss);
+	my $hashb = get_imghash ($nextfile, $ss);
+	if (imghash_cmp ($hasha, $hashb) > 5) {
+	  $equ = 0;
+	  last;
+	}
+      }
+
+      # find the previous duplicate files
+      my $has_find = 0;
+      for my $sfs (@same_files) {
+	for my $curfile (@{$sfs}) {
+	  if ($curfile eq $file) {
+	    push @{$sfs}, $nextfile unless (grep { $nextfile eq $_ } @{$sfs});
+	    $has_find = 1;
+	  }
+	}
+      }
+
+      unless ($has_find) {
+	my @sfs = ($file, $nextfile);
+	push @same_files, \@sfs;
+      }
+    }
+  }
+}
+
+sub process_manual {
+  my $sort_group_files = &sort_img_by_similar;
+
+  for my $sort_files (@$sort_group_files) {
+    for my $file (@{$sort_files}) {
+      # break when hash distance >5
+      last if ($cache{$file}->{min_hash} > 5);
+
+      my $nextfile = $cache{$file}->{min_file};
+
+      my $shorter = $cache{$file}->{info}->{id_length};
+      $shorter = $cache{$nextfile}->{info}->{id_length} if ($cache{$nextfile}->{info}->{id_length}
+							    < $shorter);
+      my $interval = $shorter / ($compare_count);
+
+      my @inputs;
+      for (0 .. $compare_count - 1) {
+	my $ss = $cache{$file}->{min_chunk} + $_ * $interval;
+	$ss =
+	  $cache{$file}->{info}->{id_length}
+	    - $cache{$file}->{min_chunk}
+	      - $_ * $interval if ($cache{$file}->{min_type} == 1);
+	my $pica = catfile ($cache{$file}->{cache_dir},
+			    $ss . ".jpg");
+	get_screenshot ($file, $ss, $pica) unless (-r $pica);
+
+	my $thumba = catfile ($cache{$file}->{cache_dir},
+			      $ss . "-$thumbnail" . '.jpg');
+	img_resize ($thumbnail, $pica, $thumba);
+	push @inputs, $thumba;
+
+	my $picb = catfile ($cache{$nextfile}->{cache_dir},
+			    $ss . ".jpg");
+	get_screenshot ($nextfile, $ss, $picb) unless (-r $picb);
+	my $thumbb = catfile ($cache{$nextfile}->{cache_dir},
+			      $ss . "-$thumbnail" . '.jpg');
+	img_resize ($thumbnail, $picb, $thumbb);
+	push @inputs, $thumbb;
+      }
+
+      my $img = catfile ($cache{$file}->{cache_dir}, $cache{$nextfile}->{phrase} . ".jpg");
+      img_combine ($img, @inputs);
+      if ($image_viewer) {
+	system ($image_viewer, $img);
+      } else {
+	my $img = Image::Magick->new;
+	$img->Read ($img);
+	$img->Display;
+      }
+      next unless (ask_if_same ($file, $nextfile));
+
+      # find the previous duplicate files
+      my $has_find = 0;
+      for my $sfs (@same_files) {
+	for my $curfile (@{$sfs}) {
+	  if ($curfile eq $file) {
+	    push @{$sfs}, $nextfile;
+	    $has_find = 1;
+	  }
+	}
+      }
+
+      unless ($has_find) {
+	my @sfs = ($file, $nextfile);
+	push @same_files, \@sfs;
+      }
+    }
+  }
+}
+
+sub ask_if_same {
+  my ($file, $nextfile) = @_;
+
+  return $yes if ($yes);
+
+  my $localyes;
+  printf "Is \n\t$file\n\t$nextfile\n are same?\n[y[es]/n[o]/a[ll]";
+  my $answer = <STDIN>;
+  chomp $answer;
+  if ($answer =~ /^[yY].*/) {
+    $localyes = 1;
+  } elsif ($answer =~ /^[aA].*/) {
+    $yes = 1;
+    $localyes = 1;
+  } else {
+    $localyes = 0;
+  }
+
+  $localyes;
+}
+
+sub sort_img_by_similar {
+  my %compared_files;
+  my @group_files;
+  my @sort_group_files;
+
+  for my $timer_id (0 .. @video_timers - 1) {
+    my @grep_files = grep { $cache{$_}->{info}->{id_length} >= $video_timers[$timer_id]->[0]
+			      && $cache{$_}->{info}->{id_length} < $video_timers[$timer_id]->[1] } keys %cache;
+    push @group_files, \@grep_files;
+  }
+
+  for my $groupid (0 .. @group_files - 1) {
+    my @files = @{$group_files[$groupid]};
+    my $chunk = $video_timers[$groupid]->[2];
+
+    next unless (@files);
+
+    my $hassame = 0;
+    for my $id (0 .. @files - 2) {
+      my $file = $files[$id];
+      my $beginhash = get_imghash ($file, $chunk);
+      my $endhash = get_imghash ($file, $cache{$file}->{info}->{id_length} - $chunk);
+
+      my $min = $hash_width * $hash_height;
+      $min = $cache{$file}->{min_hash} if ($cache{$file}->{min_file});
+
+      for my $nextid ($id + 1 .. @files - 1) {
+	my $nextfile = $files[$nextid];
+
+	my $compkey = sprintf ("%s:%s", $cache{$file}->{phrase}, $cache{$nextfile}->{phrase});
+	next if (exists $compared_files{$compkey});
+	$compared_files{$compkey} = 1;
+
+	my $nextbeginhash = get_imghash ($nextfile, $chunk);
+	my $nextendhash = get_imghash ($nextfile, $cache{$nextfile}->{info}->{id_length} - $chunk);
+
+	my $begin = imghash_cmp ($beginhash, $nextbeginhash);
+	if ($begin < $min) {
+	  $cache{$file}->{min_file} = $nextfile;
+	  $cache{$file}->{min_hash} = $begin;
+	  $cache{$file}->{min_type} = 0;
+	  $cache{$file}->{min_chunk} = $chunk;
+	  $min = $begin;
+	  $hassame = 1;
+	}
+	my $end = imghash_cmp ($endhash, $nextendhash);
+	if ($end < $min) {
+	  $cache{$file}->{min_file} = $nextfile;
+	  $cache{$file}->{min_hash} = $end;
+	  $cache{$file}->{min_type} = 1;
+	  $cache{$file}->{min_chunk} = $chunk;
+	  $min = $end;
+	  $hassame = 1;
+	}
+      }
+    }
+
+    next unless ($hassame);
+
+    my @has_files = grep { defined $cache{$_}->{min_hash} } @files;
+    my @sort_list = sort {
+      $cache{$a}->{min_hash} <=> $cache{$b}->{min_hash}
+    } @has_files;
+
+    push @sort_group_files, \@sort_list;
+  }
+
+  return \@sort_group_files;
+}
+
+sub get_screenshot {
+  if ("\L$player\E" =~ /mplayer/) {
+    get_screenshot_by_mplayer (@_);
+  }
+}
+
+sub get_screenshot_by_mplayer {
+  my ($file, $time, $img) = @_;
+
+  my ($name, $dir) = fileparse ($img);
+  make_path ($dir);
+
+  my $cmd =  "$player -ss $time -noframedrop -nosound -vo jpeg -frames 1 \"$file\"";
+  unless ($verbose) {
+    $cmd .= " >/dev/null 2>&1";
+  }
+
+  eval {
+    local $SIG{ALRM} = sub { die "timeout\n" };
+    alarm 5;
+    `$cmd`;
+    alarm 0;
+  };
+  if ($@) {
+    printf "ERROR: get file \'$file\' screenshot failed\n";
+  }
+
+  move "00000001.jpg", $img;
+}
+
+sub img_resize {
+  my ($thumb, $src, $out) = @_;
+
+  my $img = Image::Magick->new;
+  $img->Read ($src);
+  $img->Resize ($thumb);
+  $img->Write ($out);
+}
+
+sub img_combine {
+  my ($out, @files) = @_;
+
+  my $img = Image::Magick->new;
+  $img->Read ($_) for (@files);
+  my $montage = $img->Montage (tile => 2,
+			       geometry => '+0+0');
+  $montage->Write ($out);
+}
+
+sub get_imghash_key {
+  join '::::', @_;
+}
+
+sub get_imghash {
+  my ($file, $timer) = @_;
+
+  my $hashkey = get_imghash_key ($file, $timer);
+  if (exists $imghash{$hashkey}) {
+    return $imghash{$hashkey};
+  }
+
+  my $imgfile = catfile ($cache{$file}->{cache_dir}, $timer . '.jpg');
+  get_screenshot ($file, $timer, $imgfile) unless (-r $imgfile);
+
+  return unless (-r $imgfile);
+
+  my $img = Image::Magick->new;
+
+  my $imghashfile = $imgfile . '-hash.jpg';
+  if (-r $imghashfile) {
+    $img->Read ($imghashfile);
+  } else {
+    $img->Read ($imgfile);
+    $img->Resize (width => $hash_width,
+		  height => $hash_height);
+    $img->Write ($imghashfile);
+  }
+
+  my @phrase;
+  for my $w (0 .. $img->Get ('Columns') - 1) {
+    for my $h (0 .. $img->Get ('Rows') - 1) {
+      my($r, $g, $b) = $img->GetPixel (x => $w,
+				       y => $h);
+      my $ch = ($r * 30 + $g * 59 + $b * 11) / 100;
+      push @phrase, $ch;
+    }
+  }
+
+  my $sum = 0;
+  for (@phrase) {
+    $sum += $_;
+  }
+  my $avg = $sum / @phrase;
+
+  my $bin = 0;
+  for (0 .. @phrase - 1) {
+    $bin |= (1 << $_) if ($phrase[$_] >= $avg);
+  }
+
+  $imghash{$hashkey} = "$bin";
+}
+
+sub imghash_cmp {
+  my ($bina, $binb) = @_;
+
+  return $hash_width * $hash_height unless ($bina && $binb);
+
+  my $sum = 0;
+  my $odd = int ((int $bina) ^ (int $binb));
+  while ($odd) {
+    $sum ++ if ($odd & 1);
+    $odd = $odd >> 1;
+  }
+  $sum;
+}
+
+sub find_filter {
+  my $file = $File::Find::name;
+
+  return if (-d $file);
+
+  return unless (is_avfile ($file));
+
+  file_parse ($file);
+}
+
+sub file_parse {
+  my $file = shift;
+
+  my $info = get_info ($file);
+  return unless ($info);
+
+  my %nodes;
+  $nodes{info} = $info;
+  $cache{$file} = \%nodes;
+
+  my $phrase = substr sha1_hex ($file), 0, 16;
+
+  $nodes{phrase} = $phrase;
+  $nodes{cache_dir} = catdir ($workpath, substr ($phrase, 0, 2), $phrase);
+}
+
+sub is_avfile {
+  my $file = shift;
+  my (undef, undef, $suffix) = fileparse ($file, @av_suffix);
+  return 1 if ("\L$suffix\E" ~~ @av_suffix);
+  0;
+}
+
+sub get_info {
+  if ("\L$player\E" =~ /mplayer/) {
+    return get_info_by_mplayer (@_);
+  }
+}
+
+sub get_info_by_mplayer {
+  my $file = shift;
+  my @mpout;
+
+  my $cmd = "$player -identify -nosound -vc dummy -vo null \"$file\"";
+  unless ($verbose) {
+    $cmd .= " 2>/dev/null";
+  }
+
+  eval {
+    local $SIG{ALRM} = sub { die "timeout\n" };
+    alarm 5;
+    @mpout = `$cmd`;
+    alarm 0;
+  };
+  if ($@) {
+    printf "ERROR: \'$file\' get id_length error.\n";
+    return;
+  }
+
+  my %info;
+
+  my ($len_line) = grep (/ID_LENGTH/, @mpout);
+  if ($len_line && $len_line =~ /ID_LENGTH=(\d*\.\d*)/) {
+    $info{id_length} = $1;
+  } else {
+    $info{id_length} = 0;
+  }
+
+  return \%info;
+}
+
+sub display_help {
+  my $str = "
+    fdupves is a Perl script for finding duplicate video files in a given set of directories.
+      -r -recuse
+	include files residing in subdirectories
+
+      -s -symlinks
+        follow symlinked directories
+
+      -y -yes
+        not ask user, just think as yes
+
+      -C -workpath
+	output screenshot pics will be store here
+
+      -m method
+        compare method (length, auto, or manual)
+          lenght: lowest level compare, just compare the video length
+          auto: compare some screenshots in video automatically
+          manual: compare some screenshots and display to user
+
+      -d --delete
+	prompt  user  for  files  to  preserve, deleting all others
+
+      -v --verbose
+	display more debug infomations
+
+      -h --help
+	displays help
+";
+
+  print $str;
+}
