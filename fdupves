@@ -9,6 +9,8 @@ use File::Basename;
 use File::Copy;
 use File::Find;
 use File::Spec::Functions;
+use User;
+use Perl::OSType qw/is_os_type/;
 use File::Path qw/make_path/;
 use Digest::SHA qw/sha1_hex/;
 
@@ -78,10 +80,22 @@ if ($method ne 'length'
   die "Method option is not set correctly";
 }
 
-my @dirs = File::Spec->splitdir ($workpath);
-if ($dirs[0] eq '~') {
+my $os_is_win = 0;
+if (is_os_type ('Windows')) {
+  $os_is_win = 1;
+}
+
+my $UserHome = User->Home;
+
+for (@ARGV) {
+  $_ =~ s/^\~/$UserHome/;
+  $_ = File::Spec->rel2abs ($_) unless (file_name_is_absolute ($_));
+}
+
+if ($workpath =~ /^\~/) {
+  my @dirs = File::Spec->splitdir ($workpath);
   shift @dirs;
-  $workpath = catdir ($ENV{HOME}, @dirs);
+  $workpath = catdir ($UserHome, @dirs);
 }
 
 my $imghash_file = catfile ($workpath, "imghash.dat");
@@ -95,9 +109,6 @@ if (open FH, '<', $imghash_file) {
   close FH;
 }
 
-for (@ARGV) {
-  $_ = File::Spec->rel2abs ($_) unless (file_name_is_absolute ($_));
-}
 find (\&find_filter, @ARGV);
 
 die "no enough av files to process" if (keys %cache < 2);
@@ -396,7 +407,7 @@ sub get_screenshot_by_mplayer {
   make_path ($dir);
 
   my $cmd =  "$player -ss $time -noframedrop -nosound -vo jpeg -frames 1 \"$file\"";
-  unless ($verbose) {
+  unless ($os_is_win || $verbose) {
     $cmd .= " >/dev/null 2>&1";
   }
 
@@ -543,7 +554,7 @@ sub get_info_by_mplayer {
   my @mpout;
 
   my $cmd = "$player -identify -nosound -vc dummy -vo null \"$file\"";
-  unless ($verbose) {
+  unless ($os_is_win || $verbose) {
     $cmd .= " 2>/dev/null";
   }
 
