@@ -29,6 +29,12 @@ Searches the given path for duplicate video files. Such files are found by compa
 * -C -workpath
 # output screenshot pics will be store here
 
+* -m -method
+# compare method (length, auto, or manual)
+   lenght: lowest level compare, just compare the video length
+   auto: compare some screenshots in video automatically
+   manual: compare some screenshots and display to user
+
 * -d --delete
 # prompt  user  for  files  to  preserve, deleting all others
 
@@ -37,6 +43,9 @@ Searches the given path for duplicate video files. Such files are found by compa
 
 * -h --help
 # displays help
+
+* -a --auto_win_instal
+# install the windows platform dependenceis automatically.
 
 = Authors =
 
