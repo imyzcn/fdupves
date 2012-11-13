@@ -15,7 +15,7 @@ use File::Path qw/make_path/;
 use Digest::SHA qw/sha1_hex/;
 
 use User;
-use ImageMagick;
+use Image::Magick;
 use Wx qw(:everything);
 use Wx::Event qw/EVT_TOOL/;
 
