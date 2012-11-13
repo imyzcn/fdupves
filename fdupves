@@ -3,6 +3,7 @@
 use warnings;
 use strict;
 
+use utf8;
 use Data::Dumper;
 use Getopt::Long;
 use File::Basename;
@@ -13,18 +14,8 @@ use Perl::OSType qw/is_os_type/;
 use File::Path qw/make_path/;
 use Digest::SHA qw/sha1_hex/;
 
-eval {
-  unless (require User && require Image::Magick) {
-    print <<EOF
-Please install PerlMagick first.
-If you under Windows platform, you can install it automatically by
-    perl $0 -a
-Others, please install by your self.
-EOF
-      ;
-    exit;
-  }
-};
+use Wx qw(:everything);
+use Wx::Event qw/EVT_TOOL/;
 
 # VIDEO file suffix
 my @av_suffix = (
@@ -47,6 +38,7 @@ my $delete = 0;
 my $symlinks = 0;
 my $workpath = "~/.fdupves.d/cache";
 my $method = "auto";
+my $no_gui = 0;
 my $yes = 0;
 my $verbose = 0;
 my $player = 'mplayer';
@@ -65,6 +57,8 @@ my @video_timers = (
 		    [ 1800, 28800, 120 ],
 		   );
 
+# Process data
+my @dir;
 my %cache;
 my @same_files;
 
@@ -77,6 +71,7 @@ my $result = GetOptions (
 			 "delete"   => \$delete,
 			 "symlinks" => \$symlinks,
 			 "C|workpath=s" => \$workpath,
+			 "no_gui" => \$no_gui,
 			 "yes" => \$yes,
 			 "method=s" => \$method,
 			 "verbose"  => \$verbose,
@@ -86,22 +81,32 @@ my $result = GetOptions (
 			 "help" => sub { &display_help; exit; },
 			);
 
-if ($method ne 'length'
-    && $method ne 'auto'
-    && $method ne 'manual') {
-  die "Method option is not set correctly";
-}
-
 my $os_is_win = 0;
 if (is_os_type ('Windows')) {
   $os_is_win = 1;
 }
+
+eval {
+  unless (require User
+	  && require Image::Magick
+	 ) {
+    print <<EOF
+Please install PerlMagick first.
+If you under Windows platform, you can install it automatically by
+    perl $0 -a
+Others, please install by your self.
+EOF
+      ;
+    exit;
+  }
+};
 
 my $UserHome = User->Home;
 
 for (@ARGV) {
   $_ =~ s/^\~/$UserHome/;
   $_ = File::Spec->rel2abs ($_) unless (file_name_is_absolute ($_));
+  push @dir, $_;
 }
 
 if ($workpath =~ /^\~/) {
@@ -121,49 +126,235 @@ if (open FH, '<', $imghash_file) {
   close FH;
 }
 
-find (\&find_filter, @ARGV);
-
-die "no enough av files to process" if (keys %cache < 2);
-
-if ($method eq 'length') {
-  &process_by_length;
-} elsif ($method eq 'auto') {
-  &process_auto;
-} elsif ($method eq 'manual') {
-  &process_manual;
+unless ($no_gui) {
+  &gui_init;
+  exit;
+} else {
+  &process_dir;
+  &cmd_display_sames;
+  exit;
 }
 
-for my $samefilesp (@same_files) {
-  printf "Same files: \n";
-  for my $id (1 .. @{$samefilesp}) {
-    printf "\t%d    %s\n", $id, $samefilesp->[$id - 1];
+# Save the cache data before exit
+END {
+  # Save img hash and exit
+  if ($imghash_file) {
+    open FH, '>', $imghash_file;
+    for (keys %imghash) {
+      my $str = join ('||||', $_, $imghash{$_}) . "\n";
+      print FH $str;
+    }
+    close FH;
   }
-  if ($delete) {
-    do {
-      printf "\nWhich one does you hope keep?[1->%d] or 'all'\n", @$samefilesp;
-      my $answer = <STDIN>;
-      chomp $answer;
+}
 
-      next if ($answer =~ /a(ll)*/ && ($answer > @$samefilesp || $answer < 1));
+sub process_dir {
+  if ($method ne 'length'
+      && $method ne 'auto'
+      && $method ne 'manual') {
+    die "Method option is not set correctly";
+  }
 
-      if ($answer > 0 && $answer <= @$samefilesp) {
-	for my $id (1 .. @{$samefilesp}) {
-	  unlink $samefilesp->[$id] unless ($id == $answer);
+  find (\&find_filter, @dir);
+
+  die "no enough av files to process" if (keys %cache < 2);
+
+  if ($method eq 'length') {
+    &process_by_length;
+  } elsif ($method eq 'auto') {
+    &process_auto;
+  } elsif ($method eq 'manual') {
+    &process_manual;
+  }
+}
+
+sub cmd_display_sames {
+  for my $samefilesp (@same_files) {
+    printf "Same files: \n";
+    for my $id (1 .. @{$samefilesp}) {
+      printf "\t%d    %s\n", $id, $samefilesp->[$id - 1];
+    }
+    if ($delete) {
+      do {
+	printf "\nWhich one does you hope keep?[1->%d] or 'all'\n", @$samefilesp;
+	my $answer = <STDIN>;
+	chomp $answer;
+
+	next if ($answer =~ /a(ll)*/ && ($answer > @$samefilesp || $answer < 1));
+
+	if ($answer > 0 && $answer <= @$samefilesp) {
+	  for my $id (1 .. @{$samefilesp}) {
+	    unlink $samefilesp->[$id] unless ($id == $answer);
+	  }
 	}
-      }
-    } while (1);
+      } while (1);
+    }
   }
 }
 
-# Save img hash and exit
-open FH, '>', $imghash_file;
-for (keys %imghash) {
-  my $str = join ('||||', $_, $imghash{$_}) . "\n";
-  print FH $str;
-}
-close FH;
+sub gui_display_sames {
+  my $self = shift;
 
-exit 0;
+  # Clear the result tree first
+  $self->{res_tree}->DeleteAllItems;
+
+  my $root = $self->{res_tree}->AddRoot ('');
+
+  for my $samefilesp (@same_files) {
+    my $parent = $self->{res_tree}->AppendItem ($root, $samefilesp->[0],
+					   -1);
+    for my $id (1 .. @{$samefilesp} - 1) {
+      $self->{res_tree}->AppendItem ($parent,
+				     $samefilesp->[$id],
+				     -1);
+    }
+    if ($delete) {
+      do {
+	printf "\nWhich one does you hope keep?[1->%d] or 'all'\n", @$samefilesp;
+	my $answer = <STDIN>;
+	chomp $answer;
+
+	next if ($answer =~ /a(ll)*/ && ($answer > @$samefilesp || $answer < 1));
+
+	if ($answer > 0 && $answer <= @$samefilesp) {
+	  for my $id (1 .. @{$samefilesp}) {
+	    unlink $samefilesp->[$id] unless ($id == $answer);
+	  }
+	}
+      } while (1);
+    }
+  }
+
+  $self->{res_tree}->ExpandAll;
+}
+
+sub gui_init {
+  my $app = Wx::SimpleApp->new;
+  my $frame = Wx::Frame->new (undef,
+			      -1,
+			      "fdupves - find duplicate video files",
+			      [-1, -1],
+			      [600, 720]
+			     );
+
+  ui_toolbar_new ($frame);
+  ui_childarea_new ($frame);
+  ui_statusbar_new ($frame);
+
+  $frame->Show;
+  $app->MainLoop;
+}
+
+sub ui_toolbar_new {
+  my $self = shift;
+  my $toolbar = $self->CreateToolBar (wxTB_TEXT|wxTB_NOICONS);
+  $toolbar->SetMargins (5, 5);
+  $toolbar->SetSize ([-1, 50]);
+
+  my @toolbars = (
+		  ['Add', \&but_add_clicked, 'add directories for find'],
+		  ['Find', \&but_find_clicked, 'find duplicate video files'],
+		  ['Preference', \&but_pref_clicked, 'set preference'],
+		 );
+
+  for (0 .. @toolbars - 1) {
+    $toolbar->AddTool (100 + $_, $toolbars[$_]->[0], wxNullBitmap,
+		       $toolbars[$_]->[2]);
+    EVT_TOOL ($self, 100 + $_, $toolbars[$_]->[1]);
+  }
+
+  $toolbar->Realize;
+}
+
+sub ui_childarea_new {
+  my $self = shift;
+
+  $self->{vsizer} = Wx::BoxSizer->new (wxVERTICAL);
+  $self->{dir_win} = Wx::ScrolledWindow->new ($self,
+					      -1,
+					      [ -1, -1 ],
+					      [ 295, 700 ],
+					     );
+  $self->{vsizer}->Add ($self->{dir_win});
+
+  my $sizer = Wx::BoxSizer->new (wxVERTICAL);
+  $self->{dir_win}->SetSizerAndFit ($sizer);
+
+  $self->{dir_list} = Wx::ListCtrl->new ($self,
+					 -1,
+					 [ -1, -1 ],
+					 [ 295, 600 ],
+					);
+  $sizer->Add ($self->{dir_list});
+
+  # load the command line input directoies
+  for (@dir) {
+    my $item = Wx::ListItem->new;
+    $item->SetText ($_);
+    $self->{dir_list}->InsertItem ($item);
+  }
+
+  $self->{res_win} = Wx::ScrolledWindow->new ($self,
+					      -1,
+					      [ 300, -1 ],
+					      [ 300, 700 ],
+					     );
+  $self->{vsizer}->Add ($self->{res_win});
+
+  $sizer = Wx::BoxSizer->new (wxVERTICAL);
+  $self->{res_win}->SetSizerAndFit ($sizer);
+
+  $self->{res_tree} = Wx::TreeCtrl->new ($self,
+					 -1,
+					 [ 300, -1 ],
+					 [ 300, 600 ],
+					);
+  $sizer->Add ($self->{res_tree});
+}
+
+sub ui_statusbar_new {
+  my $self = shift;
+  $self->{statusbar} = $self->CreateStatusBar;
+}
+
+sub but_add_clicked {
+  my $self = shift;
+
+  my $dia = Wx::DirDialog->new ($self,
+				"Choose a directory",
+				"",
+				wxDD_DIR_MUST_EXIST);
+  my $res = $dia->ShowModal;
+  if ($res == wxID_OK) {
+    push @dir, $dia->GetPath;
+
+    my $item = Wx::ListItem->new;
+    $item->SetText ($dia->GetPath);
+    $self->{dir_list}->InsertItem ($item);
+  }
+}
+
+sub but_find_clicked {
+  my $self = shift;
+
+  unless (@dir) {
+    my $mes = Wx::MessageDialog->new ($self,
+				      "Please 'Add' source directory first.",
+				      "Warn",
+				      wxOK | wxICON_HAND | wxSTAY_ON_TOP
+				     );
+    $mes->ShowModal;
+    return;
+  }
+
+  &process_dir;
+
+  gui_display_sames ($self);
+}
+
+sub but_pref_clicked {
+  my $self = shift;
+}
 
 sub process_by_length {
   my @sort_list = sort {
