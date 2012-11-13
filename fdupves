@@ -14,6 +14,8 @@ use Perl::OSType qw/is_os_type/;
 use File::Path qw/make_path/;
 use Digest::SHA qw/sha1_hex/;
 
+use User;
+use ImageMagick;
 use Wx qw(:everything);
 use Wx::Event qw/EVT_TOOL/;
 
@@ -77,7 +79,6 @@ my $result = GetOptions (
 			 "verbose"  => \$verbose,
 			 "player=s" => \$player,
 			 "image_viewer=s" =>\$image_viewer,
-			 "auto_win_install" => sub { &auto_win_intall; exit },
 			 "help" => sub { &display_help; exit; },
 			);
 
@@ -85,21 +86,6 @@ my $os_is_win = 0;
 if (is_os_type ('Windows')) {
   $os_is_win = 1;
 }
-
-eval {
-  unless (require User
-	  && require Image::Magick
-	 ) {
-    print <<EOF
-Please install PerlMagick first.
-If you under Windows platform, you can install it automatically by
-    perl $0 -a
-Others, please install by your self.
-EOF
-      ;
-    exit;
-  }
-};
 
 my $UserHome = User->Home;
 
@@ -816,74 +802,4 @@ sub display_help {
 ";
 
   print $str;
-}
-
-sub auto_win_intall {
-  require CPAN;
-
-  print "Install Perl modules ...\n";
-  sleep 1;
-  CPAN::Shell->install ('LWP::Simple');
-  CPAN::Shell->install ('User');
-
-  eval {
-    require LWP::Simple or die $!;
-    require User or die $!
-  };
-
-  print "Install external tools: [ImageMagick]...\n";
-  sleep 1;
-
-  my $im_url = 'http://www.imagemagick.org/download/binaries/ImageMagick-6.8.0-4-Q16-windows-dll.exe';
-  my $im_file = 'ImageMagick-6.8.0-4-Q16-windows-dll.exe';
-  my $im_path = catfile (User->Home, $im_file);
-  unless (-e $im_path) {
-    LWP::Simple::getstore ($im_url, $im_path);
-  }
-
-  print <<EOF
-Now, you can install the ImageMagick to your compurer.
-Please be sure check the
-
-        Install PerlMagick for ActiveState Perl v5142.2 build 1402
-
-option box when you goto the 'Setup' step.
-EOF
-    ;
-  sleep 3;
-  system ($im_path);
-
-  print "Install external tools: [MPlayer]...\n";
-  sleep 1;
-
-  my $mp_url = 'http://sourceforge.net/projects/mplayer-win32/files/MPlayer%20and%20MEncoder/revision%2034401/MPlayer-athlon-svn-34401.7z/download';
-  my $mp_file = 'MPlayer-athlon-svn-34401.7z';
-  my $mp_path = catfile (User->Home, $mp_file);
-  unless (-e $mp_path) {
-    LWP::Simple::getstore ($mp_url, $mp_path);
-  }
-
-  print <<EOF
-Please extract the mplayer files to your C:\ disk by winrar.
-EOF
-    ;
-  sleep 3;
-  system ($mp_path);
-
-  find (\&mark_mp, 'C:\\');
-}
-
-sub mark_mp {
-  return if (-d $_);
-  if ($_ eq 'mplayer.exe') {
-    my @dirs = File::Spec->splitdir ($File::Find::name);
-    $player = catfile (@dirs);
-
-    unlink 'fdupves-win.bat';
-    open FH, '>', 'fdupves-win.bat' or die $!;
-    print FH "perl $0 -p $player", ' -r -v %1 %2 %3 %4 %5 %6 %7 %8 %9';
-    close FH;
-
-    exit 0;
-  }
 }

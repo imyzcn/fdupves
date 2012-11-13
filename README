@@ -35,6 +35,9 @@ Searches the given path for duplicate video files. Such files are found by compa
    auto: compare some screenshots in video automatically
    manual: compare some screenshots and display to user
 
+* -n -no_gui
+#not start gui, that is, just start command line
+
 * -d --delete
 # prompt  user  for  files  to  preserve, deleting all others
 
@@ -43,9 +46,6 @@ Searches the given path for duplicate video files. Such files are found by compa
 
 * -h --help
 # displays help
-
-* -a --auto_win_instal
-# install the windows platform dependenceis automatically.
 
 = Authors =
 
