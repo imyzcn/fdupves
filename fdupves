@@ -16,16 +16,17 @@ use File::Path qw/make_path/;
 use Digest::SHA qw/sha1_hex/;
 
 use User;
-use Image::Magick;
 use Wx qw(:everything);
 use Wx::Event qw/EVT_TOOL/;
 
+# GLobal configurations
 my $config;
 
 # Process data
 my @dir;
 my %cache;
 my @same_files;
+my $gui;
 
 my %imghash;
 
@@ -70,14 +71,7 @@ if (open FH, '<', $imghash_file) {
   close FH;
 }
 
-unless ($config->{no_gui}) {
-  &gui_init;
-  exit;
-} else {
-  &process_dir;
-  &cmd_display_sames;
-  exit;
-}
+&gui_init;
 
 # Save the cache data before exit
 END {
@@ -129,10 +123,16 @@ sub load_default_conf {
 			   ".swf",
 			  ],
 
-	     hash_width => 8,
-	     hash_height => 8,
 	     compare_count => 4,
-	     thumbnail => '512x384',
+
+	     hash_size => [
+			   8,
+			   8,
+			  ],
+	     thumb_size => [
+			    512,
+			    384
+			   ],
 
 	     video_timers => [
 			      [ 5, 15, 1 ],
@@ -151,6 +151,8 @@ sub load_file_conf {
 
     if ($k eq 'av_suffix'
 	|| $k eq 'img_suffix'
+	|| $k eq 'hash_size'
+	|| $k eq 'thumb_size'
        ) {
       my @items = split / /, $ini->{_}->{$k};
       $config->{$k} = \@items;
@@ -178,6 +180,8 @@ sub save_file_conf {
   for my $k (keys %{$config}) {
     if ($k eq 'av_suffix'
 	|| $k eq 'img_suffix'
+	|| $k eq 'hash_size'
+	|| $k eq 'thumb_size'
        ) {
       $ini->{_}->{$k} = join ' ', @{$config->{$k}};
 
@@ -230,31 +234,7 @@ sub process_dir {
   }
 }
 
-sub cmd_display_sames {
-  for my $samefilesp (@same_files) {
-    printf "Same files: \n";
-    for my $id (1 .. @{$samefilesp}) {
-      printf "\t%d    %s\n", $id, $samefilesp->[$id - 1];
-    }
-    if ($config->{delete}) {
-      do {
-	printf "\nWhich one does you hope keep?[1->%d] or 'all'\n", @$samefilesp;
-	my $answer = <STDIN>;
-	chomp $answer;
-
-	next if ($answer =~ /a(ll)*/ && ($answer > @$samefilesp || $answer < 1));
-
-	if ($answer > 0 && $answer <= @$samefilesp) {
-	  for my $id (1 .. @{$samefilesp}) {
-	    unlink $samefilesp->[$id] unless ($id == $answer);
-	  }
-	}
-      } while (1);
-    }
-  }
-}
-
-sub gui_display_sames {
+sub display_sames {
   my $self = shift;
 
   # Clear the result tree first
@@ -298,6 +278,10 @@ sub gui_init {
 			      [-1, -1],
 			      [600, 720]
 			     );
+
+  $gui = $frame;		#global variable
+
+  Wx::InitAllImageHandlers;	#init img handlers
 
   ui_toolbar_new ($frame);
   ui_childarea_new ($frame);
@@ -411,7 +395,7 @@ sub but_find_clicked {
 
   &process_dir;
 
-  gui_display_sames ($self);
+  display_sames ($self);
 }
 
 sub but_pref_clicked {
@@ -523,26 +507,17 @@ sub process_manual {
 	my $pica = catfile ($cache{$file}->{cache_dir},
 			    $ss . ".jpg");
 	get_screenshot ($file, $ss, $pica) unless (-r $pica);
-
-	my $thumba = catfile ($cache{$file}->{cache_dir},
-			      $ss . "-$config->{thumbnail}" . '.jpg');
-	img_resize ($config->{thumbnail}, $pica, $thumba);
-	push @inputs, $thumba;
+	push @inputs, $pica;
 
 	my $picb = catfile ($cache{$nextfile}->{cache_dir},
 			    $ss . ".jpg");
 	get_screenshot ($nextfile, $ss, $picb) unless (-r $picb);
-	my $thumbb = catfile ($cache{$nextfile}->{cache_dir},
-			      $ss . "-$config->{thumbnail}" . '.jpg');
-	img_resize ($config->{thumbnail}, $picb, $thumbb);
-	push @inputs, $thumbb;
+	push @inputs, $picb;
       }
 
-      my $img = catfile ($cache{$file}->{cache_dir}, $cache{$nextfile}->{phrase} . ".jpg");
-      img_combine ($img, @inputs);
+      my $yes = user_confirm ($gui, $file, $nextfile, \@inputs);
 
-      # TODO need add code
-      next unless (ask_if_same ($file, $nextfile));
+      next unless ($yes);
 
       # find the previous duplicate files
       my $has_find = 0;
@@ -560,6 +535,49 @@ sub process_manual {
 	push @same_files, \@sfs;
       }
     }
+  }
+}
+
+sub user_confirm {
+  my ($self, $file, $nextfile, $inputs) = @_;
+
+  my $dia = Wx::Dialog->new (undef,
+			     -1,
+			     "Yes or No",
+			    );
+  my $sizer = $dia->CreateButtonSizer (wxYES | wxNO);
+  my $lines = (@$inputs + 1) / 2;
+  my $gsizer = Wx::GridSizer->new ($lines, 2);
+  $sizer->Add ($gsizer, wxEXPAND);
+
+  for my $id (0 .. $lines - 1) {
+    my $imgfile = $inputs->[$id * 2];
+    my $img = Wx::Bitmap->new ($imgfile,
+			       wxBITMAP_TYPE_JPEG
+			      );
+    my $bitmap = Wx::StaticBitmap->new ($self,
+					wxID_ANY,
+					$img
+				       );
+    $gsizer->Add ($bitmap);
+
+    my $nextimgfile = $inputs->[$id * 2 + 1];
+    my $nextimg = Wx::Bitmap->new ($nextimgfile,
+				   wxBITMAP_TYPE_JPEG
+				  );
+    my $nextbitmap = Wx::StaticBitmap->new ($self,
+					    wxID_ANY,
+					    $nextimg
+					   );
+    $gsizer->Add ($nextbitmap);
+  }
+
+  my $yes = $dia->ShowModal;
+  $dia->Destroy;
+  if ($yes == wxID_YES) {
+    return 1;
+  } else {
+    return 0;
   }
 }
 
@@ -607,7 +625,7 @@ sub sort_img_by_similar {
       my $beginhash = get_imghash ($file, $chunk);
       my $endhash = get_imghash ($file, $cache{$file}->{info}->{id_length} - $chunk);
 
-      my $min = $config->{hash_width} * $config->{hash_height};
+      my $min = $config->{hash_size}->[0] * $config->{hash_size}->[1];
       $min = $cache{$file}->{min_hash} if ($cache{$file}->{min_file});
 
       for my $nextid ($id + 1 .. @files - 1) {
@@ -685,22 +703,21 @@ sub get_screenshot_by_mplayer {
 }
 
 sub img_resize {
-  my ($thumb, $src, $out) = @_;
+  my ($src, $out, @thumb) = @_;
 
-  my $img = Image::Magick->new;
-  $img->Read ($src);
-  $img->Resize ($thumb);
-  $img->Write ($out);
+  my $img = Wx::Image->new ($src, wxBITMAP_TYPE_JPEG);
+  $img->Rescale (@thumb);
+  $img->SaveFile ($out, wxBITMAP_TYPE_JPEG);
 }
 
 sub img_combine {
   my ($out, @files) = @_;
 
-  my $img = Image::Magick->new;
-  $img->Read ($_) for (@files);
-  my $montage = $img->Montage (tile => 2,
-			       geometry => '+0+0');
-  $montage->Write ($out);
+  #  my $img = Image::Magick->new;
+  #  $img->Read ($_) for (@files);
+  #  my $montage = $img->Montage (tile => 2,
+  #			       geometry => '+0+0');
+  #  $montage->Write ($out);
 }
 
 sub get_imghash_key {
@@ -720,23 +737,16 @@ sub get_imghash {
 
   return unless (-r $imgfile);
 
-  my $img = Image::Magick->new;
-
-  my $imghashfile = $imgfile . '-hash.jpg';
-  if (-r $imghashfile) {
-    $img->Read ($imghashfile);
-  } else {
-    $img->Read ($imgfile);
-    $img->Resize (width => $config->{hash_width},
-		  height => $config->{hash_height});
-    $img->Write ($imghashfile);
-  }
+  my $img = Wx::Image->new ($imgfile, wxBITMAP_TYPE_JPEG);
+  $img->Rescale (@{$config->{hash_size}});
 
   my @phrase;
-  for my $w (0 .. $img->Get ('Columns') - 1) {
-    for my $h (0 .. $img->Get ('Rows') - 1) {
-      my($r, $g, $b) = $img->GetPixel (x => $w,
-				       y => $h);
+  for my $w (0 .. $img->GetWidth - 1) {
+    for my $h (0 .. $img->GetHeight - 1) {
+      my($r, $g, $b) = ($img->GetRed ($w, $h),
+			$img->GetGreen ($w, $h),
+			$img->GetBlue ($w, $h)
+		       );
       my $ch = ($r * 30 + $g * 59 + $b * 11) / 100;
       push @phrase, $ch;
     }
@@ -759,7 +769,7 @@ sub get_imghash {
 sub imghash_cmp {
   my ($bina, $binb) = @_;
 
-  return $config->{hash_width} * $config->{hash_height} unless ($bina && $binb);
+  return $config->{hash_size}->[0] * $config->{hash_size}->[1] unless ($bina && $binb);
 
   my $sum = 0;
   my $odd = int ((int $bina) ^ (int $binb));
