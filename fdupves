@@ -3,6 +3,7 @@
 use warnings;
 use strict;
 
+use Config::Tiny;
 use utf8;
 use Data::Dumper;
 use Getopt::Long;
@@ -19,45 +20,7 @@ use Image::Magick;
 use Wx qw(:everything);
 use Wx::Event qw/EVT_TOOL/;
 
-# VIDEO file suffix
-my @av_suffix = (
-		 ".avi",
-		 ".rmvb",
-		 ".rm",
-		 ".mp4",
-		 ".mkv",
-		 ".3gp",
-		 ".flv",
-		 ".vob",
-		 ".wmv",
-		 ".mov",
-		 ".swf",
-		);
-
-# Global settings;
-my $recurse = 0;
-my $delete = 0;
-my $symlinks = 0;
-my $workpath = "~/.fdupves.d/cache";
-my $method = "auto";
-my $no_gui = 0;
-my $yes = 0;
-my $verbose = 0;
-my $player = 'mplayer';
-my $image_viewer = 'display';
-
-my $hash_width = 8;
-my $hash_height = 8;
-my $compare_count = 4;
-my $thumbnail = '512x384';
-
-my @video_timers = (
-		    [ 5, 15, 1 ],
-		    [ 10, 90, 3 ],
-		    [ 60, 600, 10 ],
-		    [ 480, 2400, 60 ],
-		    [ 1800, 28800, 120 ],
-		   );
+my $config;
 
 # Process data
 my @dir;
@@ -67,41 +30,36 @@ my @same_files;
 my %imghash;
 
 # Script Starts here
-# First, parse global options
-my $result = GetOptions (
-			 "recurse" => \$recurse,
-			 "delete"   => \$delete,
-			 "symlinks" => \$symlinks,
-			 "C|workpath=s" => \$workpath,
-			 "no_gui" => \$no_gui,
-			 "yes" => \$yes,
-			 "method=s" => \$method,
-			 "verbose"  => \$verbose,
-			 "player=s" => \$player,
-			 "image_viewer=s" =>\$image_viewer,
-			 "help" => sub { &display_help; exit; },
-			);
-
-my $os_is_win = 0;
+my $OsIsWin = 0;
 if (is_os_type ('Windows')) {
-  $os_is_win = 1;
+  $OsIsWin = 1;
 }
 
-my $UserHome = User->Home;
+&load_default_conf;
 
+my $UserHome = User->Home;
+my $ConfFile = catfile ($UserHome, '.fdupvesrc');
+
+# First, parse the configuration file
+&load_file_conf or die "Load configuration file error\n";
+
+# Second, parse the command line option
+&load_cmd_conf or die "Load command line options error\n";
+
+# Set src file list from command line
 for (@ARGV) {
   $_ =~ s/^\~/$UserHome/;
   $_ = File::Spec->rel2abs ($_) unless (file_name_is_absolute ($_));
   push @dir, $_;
 }
 
-if ($workpath =~ /^\~/) {
-  my @dirs = File::Spec->splitdir ($workpath);
+if ($config->{workpath} =~ /^\~/) {
+  my @dirs = File::Spec->splitdir ($config->{workpath});
   shift @dirs;
-  $workpath = catdir ($UserHome, @dirs);
+  $config->{workpath} = catdir ($UserHome, @dirs);
 }
 
-my $imghash_file = catfile ($workpath, "imghash.dat");
+my $imghash_file = catfile ($config->{workpath}, "imghash.dat");
 # load img hash
 if (open FH, '<', $imghash_file) {
   while (<FH>) {
@@ -112,7 +70,7 @@ if (open FH, '<', $imghash_file) {
   close FH;
 }
 
-unless ($no_gui) {
+unless ($config->{no_gui}) {
   &gui_init;
   exit;
 } else {
@@ -123,6 +81,11 @@ unless ($no_gui) {
 
 # Save the cache data before exit
 END {
+  # Save conf
+  if ($ConfFile && $config->{video_timers}) {
+    &save_file_conf;
+  }
+
   # Save img hash and exit
   if ($imghash_file) {
     open FH, '>', $imghash_file;
@@ -134,10 +97,123 @@ END {
   }
 }
 
+sub load_default_conf {
+  $config = {
+	     delete => 0,
+	     symlinks => 0,
+	     workpath => "~/.fdupves.d/cache",
+	     method => "auto",
+	     no_gui => 0,
+	     yes => 0,
+	     verbose => 0,
+	     player => 'mplayer',
+
+	     img_suffix => [
+			    '.jpeg',
+			    '.jpg',
+			    '.bmp',
+			    '.png',
+			   ],
+
+	     av_suffix => [
+			   ".avi",
+			   ".rmvb",
+			   ".rm",
+			   ".mp4",
+			   ".mkv",
+			   ".3gp",
+			   ".flv",
+			   ".vob",
+			   ".wmv",
+			   ".mov",
+			   ".swf",
+			  ],
+
+	     hash_width => 8,
+	     hash_height => 8,
+	     compare_count => 4,
+	     thumbnail => '512x384',
+
+	     video_timers => [
+			      [ 5, 15, 1 ],
+			      [ 10, 90, 3 ],
+			      [ 60, 600, 10 ],
+			      [ 480, 2400, 60 ],
+			      [ 1800, 28800, 120 ],
+			     ],
+	    };
+}
+
+sub load_file_conf {
+  my $ini = Config::Tiny->read ($ConfFile);
+
+  for my $k (keys %{$ini->{_}}) {
+
+    if ($k eq 'av_suffix'
+	|| $k eq 'img_suffix'
+       ) {
+      my @items = split / /, $ini->{_}->{$k};
+      $config->{$k} = \@items;
+
+    } elsif ($k eq 'video_timers') {
+      my @timers = split / /, $ini->{_}->{video_timers};
+
+      delete $config->{video_timers};
+
+      for (@timers) {
+	my @secs = split /,/, $_;
+	push @{$config->{video_timers}}, \@secs;
+      }
+
+    } else {
+      $config->{$k} = $ini->{_}->{$k};
+    }
+  }
+  1;
+}
+
+sub save_file_conf {
+  my $ini = Config::Tiny->new;
+
+  for my $k (keys %{$config}) {
+    if ($k eq 'av_suffix'
+	|| $k eq 'img_suffix'
+       ) {
+      $ini->{_}->{$k} = join ' ', @{$config->{$k}};
+
+    } elsif ($k eq 'video_timers') {
+      my @timers;
+      for my $i (@{$config->{$k}}) {
+	push @timers, join ',', @{$i};
+      }
+      $ini->{_}->{video_timers} = join ' ', @timers;
+
+    } else {
+      $ini->{_}->{$k} = $config->{$k};
+    }
+  }
+
+  $ini->write ($ConfFile);
+}
+
+sub load_cmd_conf {
+  GetOptions (
+	      "delete"   => \$config->{delete},
+	      "symlinks" => \$config->{symlinks},
+	      "C|workpath=s" => \$config->{workpath},
+	      "no_gui" => \$config->{no_gui},
+	      "yes" => \$config->{yes},
+	      "method=s" => \$config->{method},
+	      "verbose"  => \$config->{verbose},
+	      "player=s" => \$config->{player},
+	      "help" => sub { &display_help; exit; },
+	     );
+}
+
 sub process_dir {
-  if ($method ne 'length'
-      && $method ne 'auto'
-      && $method ne 'manual') {
+  if ($config->{method} ne 'length'
+      && $config->{method} ne 'auto'
+      && $config->{method} ne 'manual') {
     die "Method option is not set correctly";
   }
 
@@ -145,11 +221,11 @@ sub process_dir {
 
   die "no enough av files to process" if (keys %cache < 2);
 
-  if ($method eq 'length') {
+  if ($config->{method} eq 'length') {
     &process_by_length;
-  } elsif ($method eq 'auto') {
+  } elsif ($config->{method} eq 'auto') {
     &process_auto;
-  } elsif ($method eq 'manual') {
+  } elsif ($config->{method} eq 'manual') {
     &process_manual;
   }
 }
@@ -160,7 +236,7 @@ sub cmd_display_sames {
     for my $id (1 .. @{$samefilesp}) {
       printf "\t%d    %s\n", $id, $samefilesp->[$id - 1];
     }
-    if ($delete) {
+    if ($config->{delete}) {
       do {
 	printf "\nWhich one does you hope keep?[1->%d] or 'all'\n", @$samefilesp;
 	my $answer = <STDIN>;
@@ -188,13 +264,13 @@ sub gui_display_sames {
 
   for my $samefilesp (@same_files) {
     my $parent = $self->{res_tree}->AppendItem ($root, $samefilesp->[0],
-					   -1);
+						-1);
     for my $id (1 .. @{$samefilesp} - 1) {
       $self->{res_tree}->AppendItem ($parent,
 				     $samefilesp->[$id],
 				     -1);
     }
-    if ($delete) {
+    if ($config->{delete}) {
       do {
 	printf "\nWhich one does you hope keep?[1->%d] or 'all'\n", @$samefilesp;
 	my $answer = <STDIN>;
@@ -385,10 +461,10 @@ sub process_auto {
       my $shorter = $cache{$file}->{info}->{id_length};
       $shorter = $cache{$nextfile}->{info}->{id_length} if ($cache{$nextfile}->{info}->{id_length}
 							    < $shorter);
-      my $interval = $shorter / ($compare_count);
+      my $interval = $shorter / ($config->{compare_count});
 
       my $equ = 1;
-      for (1 .. $compare_count - 1) {
+      for (1 .. $config->{compare_count} - 1) {
 	my $ss = $cache{$file}->{min_chunk} + $_ * $interval;
 	$ss =
 	  $cache{$file}->{info}->{id_length}
@@ -435,10 +511,10 @@ sub process_manual {
       my $shorter = $cache{$file}->{info}->{id_length};
       $shorter = $cache{$nextfile}->{info}->{id_length} if ($cache{$nextfile}->{info}->{id_length}
 							    < $shorter);
-      my $interval = $shorter / ($compare_count);
+      my $interval = $shorter / ($config->{compare_count});
 
       my @inputs;
-      for (0 .. $compare_count - 1) {
+      for (0 .. $config->{compare_count} - 1) {
 	my $ss = $cache{$file}->{min_chunk} + $_ * $interval;
 	$ss =
 	  $cache{$file}->{info}->{id_length}
@@ -449,28 +525,23 @@ sub process_manual {
 	get_screenshot ($file, $ss, $pica) unless (-r $pica);
 
 	my $thumba = catfile ($cache{$file}->{cache_dir},
-			      $ss . "-$thumbnail" . '.jpg');
-	img_resize ($thumbnail, $pica, $thumba);
+			      $ss . "-$config->{thumbnail}" . '.jpg');
+	img_resize ($config->{thumbnail}, $pica, $thumba);
 	push @inputs, $thumba;
 
 	my $picb = catfile ($cache{$nextfile}->{cache_dir},
 			    $ss . ".jpg");
 	get_screenshot ($nextfile, $ss, $picb) unless (-r $picb);
 	my $thumbb = catfile ($cache{$nextfile}->{cache_dir},
-			      $ss . "-$thumbnail" . '.jpg');
-	img_resize ($thumbnail, $picb, $thumbb);
+			      $ss . "-$config->{thumbnail}" . '.jpg');
+	img_resize ($config->{thumbnail}, $picb, $thumbb);
 	push @inputs, $thumbb;
       }
 
       my $img = catfile ($cache{$file}->{cache_dir}, $cache{$nextfile}->{phrase} . ".jpg");
       img_combine ($img, @inputs);
-      if ($image_viewer) {
-	system ($image_viewer, $img);
-      } else {
-	my $img = Image::Magick->new;
-	$img->Read ($img);
-	$img->Display;
-      }
+
+      # TODO need add code
       next unless (ask_if_same ($file, $nextfile));
 
       # find the previous duplicate files
@@ -495,7 +566,7 @@ sub process_manual {
 sub ask_if_same {
   my ($file, $nextfile) = @_;
 
-  return $yes if ($yes);
+  return $config->{yes} if ($config->{yes});
 
   my $localyes;
   printf "Is \n\t$file\n\t$nextfile\n are same?\n[y[es]/n[o]/a[ll]";
@@ -504,7 +575,7 @@ sub ask_if_same {
   if ($answer =~ /^[yY].*/) {
     $localyes = 1;
   } elsif ($answer =~ /^[aA].*/) {
-    $yes = 1;
+    $config->{yes} = 1;
     $localyes = 1;
   } else {
     $localyes = 0;
@@ -518,15 +589,15 @@ sub sort_img_by_similar {
   my @group_files;
   my @sort_group_files;
 
-  for my $timer_id (0 .. @video_timers - 1) {
-    my @grep_files = grep { $cache{$_}->{info}->{id_length} >= $video_timers[$timer_id]->[0]
-			      && $cache{$_}->{info}->{id_length} < $video_timers[$timer_id]->[1] } keys %cache;
+  for my $timer_id (0 .. @{$config->{video_timers}} - 1) {
+    my @grep_files = grep { $cache{$_}->{info}->{id_length} >= $config->{video_timers}->[$timer_id]->[0]
+			      && $cache{$_}->{info}->{id_length} < $config->{video_timers}->[$timer_id]->[1] } keys %cache;
     push @group_files, \@grep_files;
   }
 
   for my $groupid (0 .. @group_files - 1) {
     my @files = @{$group_files[$groupid]};
-    my $chunk = $video_timers[$groupid]->[2];
+    my $chunk = $config->{video_timers}->[$groupid]->[2];
 
     next unless (@files);
 
@@ -536,7 +607,7 @@ sub sort_img_by_similar {
       my $beginhash = get_imghash ($file, $chunk);
       my $endhash = get_imghash ($file, $cache{$file}->{info}->{id_length} - $chunk);
 
-      my $min = $hash_width * $hash_height;
+      my $min = $config->{hash_width} * $config->{hash_height};
       $min = $cache{$file}->{min_hash} if ($cache{$file}->{min_file});
 
       for my $nextid ($id + 1 .. @files - 1) {
@@ -584,7 +655,7 @@ sub sort_img_by_similar {
 }
 
 sub get_screenshot {
-  if ("\L$player\E" =~ /mplayer/) {
+  if ("\L$config->{player}\E" =~ /mplayer/) {
     get_screenshot_by_mplayer (@_);
   }
 }
@@ -595,8 +666,8 @@ sub get_screenshot_by_mplayer {
   my ($name, $dir) = fileparse ($img);
   make_path ($dir);
 
-  my $cmd =  "$player -ss $time -noframedrop -nosound -vo jpeg -frames 1 \"$file\"";
-  unless ($os_is_win || $verbose) {
+  my $cmd =  "$config->{player} -ss $time -noframedrop -nosound -vo jpeg -frames 1 \"$file\"";
+  unless ($OsIsWin || $config->{verbose}) {
     $cmd .= " >/dev/null 2>&1";
   }
 
@@ -656,8 +727,8 @@ sub get_imghash {
     $img->Read ($imghashfile);
   } else {
     $img->Read ($imgfile);
-    $img->Resize (width => $hash_width,
-		  height => $hash_height);
+    $img->Resize (width => $config->{hash_width},
+		  height => $config->{hash_height});
     $img->Write ($imghashfile);
   }
 
@@ -688,7 +759,7 @@ sub get_imghash {
 sub imghash_cmp {
   my ($bina, $binb) = @_;
 
-  return $hash_width * $hash_height unless ($bina && $binb);
+  return $config->{hash_width} * $config->{hash_height} unless ($bina && $binb);
 
   my $sum = 0;
   my $odd = int ((int $bina) ^ (int $binb));
@@ -722,18 +793,18 @@ sub file_parse {
   my $phrase = substr sha1_hex ($file), 0, 16;
 
   $nodes{phrase} = $phrase;
-  $nodes{cache_dir} = catdir ($workpath, substr ($phrase, 0, 2), $phrase);
+  $nodes{cache_dir} = catdir ($config->{workpath}, substr ($phrase, 0, 2), $phrase);
 }
 
 sub is_avfile {
   my $file = shift;
-  my (undef, undef, $suffix) = fileparse ($file, @av_suffix);
-  return 1 if ("\L$suffix\E" ~~ @av_suffix);
+  my (undef, undef, $suffix) = fileparse ($file, @{$config->{av_suffix}});
+  return 1 if ("\L$suffix\E" ~~ @{$config->{av_suffix}});
   0;
 }
 
 sub get_info {
-  if ("\L$player\E" =~ /mplayer/) {
+  if ("\L$config->{player}\E" =~ /mplayer/) {
     return get_info_by_mplayer (@_);
   }
 }
@@ -742,8 +813,8 @@ sub get_info_by_mplayer {
   my $file = shift;
   my @mpout;
 
-  my $cmd = "$player -identify -nosound -vc dummy -vo null \"$file\"";
-  unless ($os_is_win || $verbose) {
+  my $cmd = "$config->{player} -identify -nosound -vc dummy -vo null \"$file\"";
+  unless ($OsIsWin || $config->{verbose}) {
     $cmd .= " 2>/dev/null";
   }
 
