@@ -1,5 +1,6 @@
 #!/usr/bin/perl
 
+use v5.14;
 use warnings;
 use strict;
 
@@ -26,9 +27,6 @@ my $config;
 my @dir;
 my %cache;
 my @same_files;
-my $gui;
-
-my %imghash;
 
 # Script Starts here
 my $OsIsWin = 0;
@@ -40,6 +38,7 @@ if (is_os_type ('Windows')) {
 
 my $UserHome = User->Home;
 my $ConfFile = catfile ($UserHome, '.fdupvesrc');
+my $CacheFile = catfile ($UserHome, '.fdupves.cache');
 
 # First, parse the configuration file
 &load_file_conf or die "Load configuration file error\n";
@@ -60,13 +59,12 @@ if ($config->{workpath} =~ /^\~/) {
   $config->{workpath} = catdir ($UserHome, @dirs);
 }
 
-my $imghash_file = catfile ($config->{workpath}, "imghash.dat");
 # load img hash
-if (open FH, '<', $imghash_file) {
+if (open FH, '<', $CacheFile) {
   while (<FH>) {
     chomp;
-    my ($key, $value) = split /\|\|\|\|/, $_;
-    $imghash{$key} = $value;
+    my ($file, $timer, $value) = split /\|\|\|\|/, $_;
+    $cache{$file}->{hash}->{$timer} = $value;
   }
   close FH;
 }
@@ -76,16 +74,18 @@ if (open FH, '<', $imghash_file) {
 # Save the cache data before exit
 END {
   # Save conf
-  if ($ConfFile && $config->{video_timers}) {
+  if ($ConfFile) {
     &save_file_conf;
   }
 
   # Save img hash and exit
-  if ($imghash_file) {
-    open FH, '>', $imghash_file;
-    for (keys %imghash) {
-      my $str = join ('||||', $_, $imghash{$_}) . "\n";
-      print FH $str;
+  if ($CacheFile) {
+    open FH, '>', $CacheFile;
+    for my $file (keys %cache) {
+      while (my ($timer, $hash) = each %{$cache{$file}->{hash}}) {
+	my $str = join ('||||', $file, $timer, $hash) . "\n";
+	print FH $str;
+      }
     }
     close FH;
   }
@@ -97,7 +97,6 @@ sub load_default_conf {
 	     symlinks => 0,
 	     workpath => "~/.fdupves.d/cache",
 	     method => "auto",
-	     no_gui => 0,
 	     yes => 0,
 	     verbose => 0,
 	     player => 'mplayer',
@@ -205,7 +204,6 @@ sub load_cmd_conf {
 	      "delete"   => \$config->{delete},
 	      "symlinks" => \$config->{symlinks},
 	      "C|workpath=s" => \$config->{workpath},
-	      "no_gui" => \$config->{no_gui},
 	      "yes" => \$config->{yes},
 	      "method=s" => \$config->{method},
 	      "verbose"  => \$config->{verbose},
@@ -215,22 +213,26 @@ sub load_cmd_conf {
 }
 
 sub process_dir {
+  my $self = shift;
   if ($config->{method} ne 'length'
       && $config->{method} ne 'auto'
       && $config->{method} ne 'manual') {
     die "Method option is not set correctly";
   }
 
-  find (\&find_filter, @dir);
+  find ({wanted => \&find_filter,
+	 follow => $config->{symlinks},
+	 follow_skip => 2,
+	}, @dir);
 
   die "no enough av files to process" if (keys %cache < 2);
 
   if ($config->{method} eq 'length') {
-    &process_by_length;
+    process_by_length ($self);
   } elsif ($config->{method} eq 'auto') {
-    &process_auto;
+    process_auto ($self);
   } elsif ($config->{method} eq 'manual') {
-    &process_manual;
+    process_manual ($self);
   }
 }
 
@@ -276,10 +278,8 @@ sub gui_init {
 			      -1,
 			      "fdupves - find duplicate video files",
 			      [-1, -1],
-			      [600, 720]
+			      [1024, 728]
 			     );
-
-  $gui = $frame;		#global variable
 
   Wx::InitAllImageHandlers;	#init img handlers
 
@@ -315,23 +315,20 @@ sub ui_toolbar_new {
 sub ui_childarea_new {
   my $self = shift;
 
-  $self->{vsizer} = Wx::BoxSizer->new (wxVERTICAL);
+  $self->{vsizer} = Wx::BoxSizer->new (wxHORIZONTAL);
+
   $self->{dir_win} = Wx::ScrolledWindow->new ($self,
 					      -1,
-					      [ -1, -1 ],
-					      [ 295, 700 ],
 					     );
-  $self->{vsizer}->Add ($self->{dir_win});
+  $self->{vsizer}->Add ($self->{dir_win}, 1, wxEXPAND|wxALL, 0);
 
   my $sizer = Wx::BoxSizer->new (wxVERTICAL);
-  $self->{dir_win}->SetSizerAndFit ($sizer);
-
-  $self->{dir_list} = Wx::ListCtrl->new ($self,
+  $self->{dir_list} = Wx::ListCtrl->new ($self->{dir_win},
 					 -1,
-					 [ -1, -1 ],
-					 [ 295, 600 ],
 					);
-  $sizer->Add ($self->{dir_list});
+  $sizer->Add ($self->{dir_list}, 1, wxEXPAND|wxALL, 5);
+
+  $self->{dir_win}->SetSizer ($sizer);
 
   # load the command line input directoies
   for (@dir) {
@@ -342,20 +339,19 @@ sub ui_childarea_new {
 
   $self->{res_win} = Wx::ScrolledWindow->new ($self,
 					      -1,
-					      [ 300, -1 ],
-					      [ 300, 700 ],
 					     );
-  $self->{vsizer}->Add ($self->{res_win});
+  $self->{vsizer}->Add ($self->{res_win}, 1, wxEXPAND, 0);
 
   $sizer = Wx::BoxSizer->new (wxVERTICAL);
-  $self->{res_win}->SetSizerAndFit ($sizer);
-
-  $self->{res_tree} = Wx::TreeCtrl->new ($self,
+  $self->{res_tree} = Wx::TreeCtrl->new ($self->{res_win},
 					 -1,
-					 [ 300, -1 ],
-					 [ 300, 600 ],
 					);
-  $sizer->Add ($self->{res_tree});
+  $sizer->Add ($self->{res_tree}, 1, wxEXPAND|wxALL, 5);
+
+  $self->{res_win}->SetSizer ($sizer);
+
+  $self->SetSizer ($self->{vsizer});
+  $self->{vsizer}->SetSizeHints ($self);
 }
 
 sub ui_statusbar_new {
@@ -393,7 +389,7 @@ sub but_find_clicked {
     return;
   }
 
-  &process_dir;
+  process_dir ($self);
 
   display_sames ($self);
 }
@@ -403,9 +399,11 @@ sub but_pref_clicked {
 }
 
 sub process_by_length {
+  my $self = shift;
+
   my @sort_list = sort {
-    $cache{$a}->{info}->{id_length}
-      <=> $cache{$b}->{info}->{id_length}
+    $cache{$a}->{info}->{length}
+      <=> $cache{$b}->{info}->{length}
     } keys %cache;
 
   my $curid = 0;
@@ -419,7 +417,7 @@ sub process_by_length {
       $curid = $nextid;
 
       my $nextfile = $sort_list[$nextid];
-      if ($cache{$file}->{info}->{id_length} == $cache{$nextfile}->{info}->{id_length}) {
+      if ($cache{$file}->{info}->{length} == $cache{$nextfile}->{info}->{length}) {
 	push @samefiles, $nextfile;
       } else {
 	last;
@@ -433,6 +431,7 @@ sub process_by_length {
 }
 
 sub process_auto {
+  my $self = shift;
   my $sort_group_files = &sort_img_by_similar;
 
   for my $sort_files (@$sort_group_files) {
@@ -442,16 +441,16 @@ sub process_auto {
 
       my $nextfile = $cache{$file}->{min_file};
 
-      my $shorter = $cache{$file}->{info}->{id_length};
-      $shorter = $cache{$nextfile}->{info}->{id_length} if ($cache{$nextfile}->{info}->{id_length}
-							    < $shorter);
+      my $shorter = $cache{$file}->{info}->{length};
+      $shorter = $cache{$nextfile}->{info}->{length} if ($cache{$nextfile}->{info}->{length}
+							 < $shorter);
       my $interval = $shorter / ($config->{compare_count});
 
       my $equ = 1;
       for (1 .. $config->{compare_count} - 1) {
 	my $ss = $cache{$file}->{min_chunk} + $_ * $interval;
 	$ss =
-	  $cache{$file}->{info}->{id_length}
+	  $cache{$file}->{info}->{length}
 	    - $cache{$file}->{min_chunk}
 	      - $_ * $interval if ($cache{$file}->{min_type} == 1);
 
@@ -483,6 +482,7 @@ sub process_auto {
 }
 
 sub process_manual {
+  my $self = shift;
   my $sort_group_files = &sort_img_by_similar;
 
   for my $sort_files (@$sort_group_files) {
@@ -492,16 +492,16 @@ sub process_manual {
 
       my $nextfile = $cache{$file}->{min_file};
 
-      my $shorter = $cache{$file}->{info}->{id_length};
-      $shorter = $cache{$nextfile}->{info}->{id_length} if ($cache{$nextfile}->{info}->{id_length}
-							    < $shorter);
+      my $shorter = $cache{$file}->{info}->{length};
+      $shorter = $cache{$nextfile}->{info}->{length} if ($cache{$nextfile}->{info}->{length}
+							 < $shorter);
       my $interval = $shorter / ($config->{compare_count});
 
       my @inputs;
       for (0 .. $config->{compare_count} - 1) {
 	my $ss = $cache{$file}->{min_chunk} + $_ * $interval;
 	$ss =
-	  $cache{$file}->{info}->{id_length}
+	  $cache{$file}->{info}->{length}
 	    - $cache{$file}->{min_chunk}
 	      - $_ * $interval if ($cache{$file}->{min_type} == 1);
 	my $pica = catfile ($cache{$file}->{cache_dir},
@@ -515,7 +515,7 @@ sub process_manual {
 	push @inputs, $picb;
       }
 
-      my $yes = user_confirm ($gui, $file, $nextfile, \@inputs);
+      my $yes = user_confirm ($self, $file, $nextfile, \@inputs);
 
       next unless ($yes);
 
@@ -541,65 +541,72 @@ sub process_manual {
 sub user_confirm {
   my ($self, $file, $nextfile, $inputs) = @_;
 
-  my $dia = Wx::Dialog->new (undef,
-			     -1,
+  my $lines = int ((@$inputs + 1) / 2);
+  my $w = $config->{thumb_size}->[0];
+  my $h = $config->{thumb_size}->[1];
+
+  my $dia = Wx::Dialog->new ($self,
+			     wxID_ANY,
 			     "Yes or No",
 			    );
-  my $sizer = $dia->CreateButtonSizer (wxYES | wxNO);
-  my $lines = (@$inputs + 1) / 2;
+  my $sizer = Wx::BoxSizer->new (wxVERTICAL);
+
   my $gsizer = Wx::GridSizer->new ($lines, 2);
-  $sizer->Add ($gsizer, wxEXPAND);
+  $sizer->Add ($gsizer, 1, wxEXPAND, 10);
 
   for my $id (0 .. $lines - 1) {
     my $imgfile = $inputs->[$id * 2];
-    my $img = Wx::Bitmap->new ($imgfile,
-			       wxBITMAP_TYPE_JPEG
-			      );
-    my $bitmap = Wx::StaticBitmap->new ($self,
+    my $imgpre = Wx::Image->new ($imgfile, wxBITMAP_TYPE_JPEG);
+    $imgpre->Rescale ($w, $h);
+    my $img = Wx::Bitmap->new ($imgpre);
+    my $bitmap = Wx::StaticBitmap->new ($dia,
 					wxID_ANY,
-					$img
+					$img,
 				       );
-    $gsizer->Add ($bitmap);
+    $gsizer->Add ($bitmap, 0);
 
     my $nextimgfile = $inputs->[$id * 2 + 1];
-    my $nextimg = Wx::Bitmap->new ($nextimgfile,
-				   wxBITMAP_TYPE_JPEG
-				  );
-    my $nextbitmap = Wx::StaticBitmap->new ($self,
+    my $nextimgpre = Wx::Image->new ($nextimgfile, wxBITMAP_TYPE_JPEG);
+    $nextimgpre->Rescale ($w, $h);
+    my $nextimg = Wx::Bitmap->new ($nextimgpre);
+    my $nextbitmap = Wx::StaticBitmap->new ($dia,
 					    wxID_ANY,
-					    $nextimg
+					    $nextimg,
 					   );
-    $gsizer->Add ($nextbitmap);
+    $gsizer->Add ($nextbitmap, 0);
   }
 
+  my $tsizer = Wx::BoxSizer->new (wxHORIZONTAL);
+  my $fileinfo = Wx::TextCtrl->new ($dia,
+				    wxID_ANY,
+				    file_info_string ($file),
+				    [ -1, -1 ],
+				    [ -1, -1 ],
+				    wxTE_MULTILINE|wxTE_READONLY|wxTR_ROW_LINES,
+				   );
+  $tsizer->Add ($fileinfo, 1, wxEXPAND|wxALL, 0);
+  my $nextfileinfo = Wx::TextCtrl->new ($dia,
+					wxID_ANY,
+					file_info_string ($nextfile),
+					[ -1, -1 ],
+					[ -1, -1 ],
+					wxTE_MULTILINE|wxTE_READONLY|wxTR_ROW_LINES,
+				       );
+  $tsizer->Add ($nextfileinfo, 1, wxEXPAND|wxALL, 0);
+  $sizer->Add ($tsizer, 0, wxEXPAND|wxALL, 4);
+
+  my $bsizer = $dia->CreateButtonSizer (wxYES | wxCANCEL);
+  $sizer->Add ($bsizer, 0, wxALIGN_CENTER_HORIZONTAL);
+
+  $dia->SetSizer ($sizer);
+  $sizer->SetSizeHints ($dia);
+
   my $yes = $dia->ShowModal;
-  $dia->Destroy;
   if ($yes == wxID_YES) {
     return 1;
   } else {
     return 0;
   }
-}
-
-sub ask_if_same {
-  my ($file, $nextfile) = @_;
-
-  return $config->{yes} if ($config->{yes});
-
-  my $localyes;
-  printf "Is \n\t$file\n\t$nextfile\n are same?\n[y[es]/n[o]/a[ll]";
-  my $answer = <STDIN>;
-  chomp $answer;
-  if ($answer =~ /^[yY].*/) {
-    $localyes = 1;
-  } elsif ($answer =~ /^[aA].*/) {
-    $config->{yes} = 1;
-    $localyes = 1;
-  } else {
-    $localyes = 0;
-  }
-
-  $localyes;
 }
 
 sub sort_img_by_similar {
@@ -608,8 +615,8 @@ sub sort_img_by_similar {
   my @sort_group_files;
 
   for my $timer_id (0 .. @{$config->{video_timers}} - 1) {
-    my @grep_files = grep { $cache{$_}->{info}->{id_length} >= $config->{video_timers}->[$timer_id]->[0]
-			      && $cache{$_}->{info}->{id_length} < $config->{video_timers}->[$timer_id]->[1] } keys %cache;
+    my @grep_files = grep { $cache{$_}->{info}->{length} >= $config->{video_timers}->[$timer_id]->[0]
+			      && $cache{$_}->{info}->{length} < $config->{video_timers}->[$timer_id]->[1] } keys %cache;
     push @group_files, \@grep_files;
   }
 
@@ -623,7 +630,7 @@ sub sort_img_by_similar {
     for my $id (0 .. @files - 2) {
       my $file = $files[$id];
       my $beginhash = get_imghash ($file, $chunk);
-      my $endhash = get_imghash ($file, $cache{$file}->{info}->{id_length} - $chunk);
+      my $endhash = get_imghash ($file, $cache{$file}->{info}->{length} - $chunk);
 
       my $min = $config->{hash_size}->[0] * $config->{hash_size}->[1];
       $min = $cache{$file}->{min_hash} if ($cache{$file}->{min_file});
@@ -636,7 +643,7 @@ sub sort_img_by_similar {
 	$compared_files{$compkey} = 1;
 
 	my $nextbeginhash = get_imghash ($nextfile, $chunk);
-	my $nextendhash = get_imghash ($nextfile, $cache{$nextfile}->{info}->{id_length} - $chunk);
+	my $nextendhash = get_imghash ($nextfile, $cache{$nextfile}->{info}->{length} - $chunk);
 
 	my $begin = imghash_cmp ($beginhash, $nextbeginhash);
 	if ($begin < $min) {
@@ -702,35 +709,10 @@ sub get_screenshot_by_mplayer {
   move "00000001.jpg", $img;
 }
 
-sub img_resize {
-  my ($src, $out, @thumb) = @_;
-
-  my $img = Wx::Image->new ($src, wxBITMAP_TYPE_JPEG);
-  $img->Rescale (@thumb);
-  $img->SaveFile ($out, wxBITMAP_TYPE_JPEG);
-}
-
-sub img_combine {
-  my ($out, @files) = @_;
-
-  #  my $img = Image::Magick->new;
-  #  $img->Read ($_) for (@files);
-  #  my $montage = $img->Montage (tile => 2,
-  #			       geometry => '+0+0');
-  #  $montage->Write ($out);
-}
-
-sub get_imghash_key {
-  join '::::', @_;
-}
-
 sub get_imghash {
   my ($file, $timer) = @_;
 
-  my $hashkey = get_imghash_key ($file, $timer);
-  if (exists $imghash{$hashkey}) {
-    return $imghash{$hashkey};
-  }
+  return $cache{$file}->{hash}->{$timer} if (exists ($cache{$file}->{hash}->{$timer}));
 
   my $imgfile = catfile ($cache{$file}->{cache_dir}, $timer . '.jpg');
   get_screenshot ($file, $timer, $imgfile) unless (-r $imgfile);
@@ -763,7 +745,7 @@ sub get_imghash {
     $bin |= (1 << $_) if ($phrase[$_] >= $avg);
   }
 
-  $imghash{$hashkey} = "$bin";
+  $cache{$file}->{hash}->{$timer} = $bin;
 }
 
 sub imghash_cmp {
@@ -788,6 +770,18 @@ sub find_filter {
   return unless (is_avfile ($file));
 
   file_parse ($file);
+}
+
+sub file_info_string {
+  my $file = shift;
+
+  return sprintf
+    "File:%s\nFormat:%s\nLength:%s\nSize:%dx%d\n",
+      basename ($file),
+	$cache{$file}->{info}->{format},
+	  $cache{$file}->{info}->{length},
+	    $cache{$file}->{info}->{width},
+	      $cache{$file}->{info}->{height};
 }
 
 sub file_parse {
@@ -835,28 +829,27 @@ sub get_info_by_mplayer {
     alarm 0;
   };
   if ($@) {
-    printf "ERROR: \'$file\' get id_length error.\n";
+    printf "ERROR: \'$file\' get length error.\n";
     return;
   }
 
   my %info;
 
-  my ($len_line) = grep (/ID_LENGTH/, @mpout);
-  if ($len_line && $len_line =~ /ID_LENGTH=(\d*\.\d*)/) {
-    $info{id_length} = $1;
-  } else {
-    $info{id_length} = 0;
+  for (@mpout) {
+    given ($_) {
+      $info{format} = $1 when (/(.+) file format detected/);
+      $info{length} = $1 when (/ID_LENGTH=(\d*\.?\d*)/);
+      $info{width} = $1 when (/ID_VIDEO_WIDTH=(\d+)/);
+      $info{height} = $1 when (/ID_VIDEO_HEIGHT=(\d+)/);
+      default {};
+    }
   }
-
   return \%info;
 }
 
 sub display_help {
   my $str = "
     fdupves is a Perl script for finding duplicate video files in a given set of directories.
-      -r -recuse
-	include files residing in subdirectories
-
       -s -symlinks
         follow symlinked directories
 
