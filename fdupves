@@ -10,7 +10,6 @@ use Data::Dumper;
 use Getopt::Long;
 use File::Basename;
 use File::Copy;
-use File::Find;
 use File::Spec::Functions;
 use Perl::OSType qw/is_os_type/;
 use File::Path qw/make_path/;
@@ -25,6 +24,7 @@ my $config;
 
 # Process data
 my @dir;
+my %pre_cache;
 my %cache;
 my @same_files;
 
@@ -64,7 +64,7 @@ if (open FH, '<', $CacheFile) {
   while (<FH>) {
     chomp;
     my ($file, $timer, $value) = split /\|\|\|\|/, $_;
-    $cache{$file}->{hash}->{$timer} = $value;
+    $pre_cache{$file}->{hash}->{$timer} = $value;
   }
   close FH;
 }
@@ -93,7 +93,6 @@ END {
 
 sub load_default_conf {
   $config = {
-	     delete => 0,
 	     symlinks => 0,
 	     workpath => "~/.fdupves.d/cache",
 	     method => "auto",
@@ -201,7 +200,6 @@ sub save_file_conf {
 
 sub load_cmd_conf {
   GetOptions (
-	      "delete"   => \$config->{delete},
 	      "symlinks" => \$config->{symlinks},
 	      "C|workpath=s" => \$config->{workpath},
 	      "yes" => \$config->{yes},
@@ -220,10 +218,15 @@ sub process_dir {
     die "Method option is not set correctly";
   }
 
-  find ({wanted => \&find_filter,
-	 follow => $config->{symlinks},
-	 follow_skip => 2,
-	}, @dir);
+  for (@dir) {
+    next if (-l $_ && (not $config->{symlinks}));
+
+    if (-d $_) {
+      walk_dir (\&file_parse, $_);
+    } elsif (-f $_) {
+      file_parse ($_) if (is_avfile ($_));
+    }
+  }
 
   die "no enough av files to process" if (keys %cache < 2);
 
@@ -233,6 +236,34 @@ sub process_dir {
     process_auto ($self);
   } elsif ($config->{method} eq 'manual') {
     process_manual ($self);
+  }
+}
+
+sub walk_dir {
+  my ($callback, @dirs) = @_;
+
+  while (my $dir = pop @dirs) {
+    local *DH;
+    if (!opendir (DH, $dir)) {
+      print "Cannot opendir $dir: $!";
+      next;
+    }
+    foreach (readdir (DH)) {
+      if ($_ eq '.' || $_ eq '..') {
+	next;
+      }
+      my $file = catfile ($dir, $_);
+
+      next if (-l $file && (not $config->{symlinks}));
+
+      if (-d $file) {
+	push (@dirs, $file);
+      } elsif (-f $file) {
+	&$callback ($file) if (is_avfile ($file));
+      }
+    }
+
+    closedir(DH);
   }
 }
 
@@ -251,21 +282,6 @@ sub display_sames {
       $self->{res_tree}->AppendItem ($parent,
 				     $samefilesp->[$id],
 				     -1);
-    }
-    if ($config->{delete}) {
-      do {
-	printf "\nWhich one does you hope keep?[1->%d] or 'all'\n", @$samefilesp;
-	my $answer = <STDIN>;
-	chomp $answer;
-
-	next if ($answer =~ /a(ll)*/ && ($answer > @$samefilesp || $answer < 1));
-
-	if ($answer > 0 && $answer <= @$samefilesp) {
-	  for my $id (1 .. @{$samefilesp}) {
-	    unlink $samefilesp->[$id] unless ($id == $answer);
-	  }
-	}
-      } while (1);
     }
   }
 
@@ -317,18 +333,42 @@ sub ui_childarea_new {
 
   $self->{vsizer} = Wx::BoxSizer->new (wxHORIZONTAL);
 
-  $self->{dir_win} = Wx::ScrolledWindow->new ($self,
-					      -1,
-					     );
-  $self->{vsizer}->Add ($self->{dir_win}, 1, wxEXPAND|wxALL, 0);
-
   my $sizer = Wx::BoxSizer->new (wxVERTICAL);
-  $self->{dir_list} = Wx::ListCtrl->new ($self->{dir_win},
+
+  my $label = Wx::StaticText->new ($self,
+				   wxID_ANY,
+				   "Media Files",
+				   [ -1, -1 ],
+				   [ 400, 25 ],
+				  );
+  $sizer->Add ($label, 0, wxEXPAND|wxHORIZONTAL, 10);
+
+  $self->{dir_list} = Wx::ListCtrl->new ($self,
 					 -1,
+					 [ -1, -1 ],
+					 [ 400, 300 ],
 					);
   $sizer->Add ($self->{dir_list}, 1, wxEXPAND|wxALL, 5);
 
-  $self->{dir_win}->SetSizer ($sizer);
+  # Tempory method
+  {
+    my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
+    my $label = Wx::StaticText->new ($self,
+				     wxID_ANY,
+				     "Default find method"
+				    );
+    $hsizer->Add ($label, 1, wxEXPAND);
+    $self->{method_input} = Wx::Choice->new ($self,
+					     wxID_ANY,
+					     [ -1, -1 ],
+					     [ 200, 25 ],
+					     [ 'length', 'auto', 'manual' ],
+					    );
+    $hsizer->Add ($self->{method_input}, 1, wxEXPAND);
+    $sizer->Add ($hsizer, 0, wxEXPAND|wxHORIZONTAL);
+  }
+
+  $self->{vsizer}->Add ($sizer, 1, wxEXPAND|wxALL, 5);
 
   # load the command line input directoies
   for (@dir) {
@@ -337,20 +377,24 @@ sub ui_childarea_new {
     $self->{dir_list}->InsertItem ($item);
   }
 
-  $self->{res_win} = Wx::ScrolledWindow->new ($self,
-					      -1,
-					     );
-  $self->{vsizer}->Add ($self->{res_win}, 1, wxEXPAND, 0);
-
   $sizer = Wx::BoxSizer->new (wxVERTICAL);
-  $self->{res_tree} = Wx::TreeCtrl->new ($self->{res_win},
+
+  $label = Wx::StaticText->new ($self,
+				wxID_ANY,
+				"Same Files",
+				[ -1, -1 ],
+				[ 400, 25 ],
+			       );
+  $sizer->Add ($label, 0, wxEXPAND|wxHORIZONTAL, 10);
+
+  $self->{res_tree} = Wx::TreeCtrl->new ($self,
 					 -1,
 					);
   $sizer->Add ($self->{res_tree}, 1, wxEXPAND|wxALL, 5);
 
-  $self->{res_win}->SetSizer ($sizer);
+  $self->{vsizer}->Add ($sizer, 1, wxEXPAND|wxALL, 5);
 
-  $self->SetSizer ($self->{vsizer});
+  $self->SetSizerAndFit ($self->{vsizer});
   $self->{vsizer}->SetSizeHints ($self);
 }
 
@@ -396,6 +440,77 @@ sub but_find_clicked {
 
 sub but_pref_clicked {
   my $self = shift;
+
+  my $dia = Wx::Dialog->new ($self,
+			     wxID_ANY,
+			     "Preference",
+			     [ -1, -1 ],
+			     [ -1, -1 ],
+			     wxRESIZE_BORDER,
+			    );
+
+  my $vsizer = Wx::BoxSizer->new (wxVERTICAL);
+
+  # MPlayer path
+  {
+    my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
+    my $label = Wx::StaticText->new ($dia,
+				     wxID_ANY,
+				     "MPlayer Binary",
+				     [ -1, -1 ],
+				     [ 100, 20 ],
+				    );
+    $hsizer->Add ($label, 0, wxALIGN_CENTER_VERTICAL);
+    $dia->{player_input} = Wx::FilePickerCtrl->new ($dia,
+						    wxID_ANY,
+						    "",
+						    "Please select your mplayer executable file",
+						    "*",
+						    [ -1, -1 ],
+						    [ -1, -1 ],
+						    wxFLP_USE_TEXTCTRL | wxFLP_OPEN,
+						   );
+    $dia->{player_input}->SetPath ($config->{player});
+    $hsizer->Add ($dia->{player_input}, 1, wxEXPAND);
+    $vsizer->Add ($hsizer, 1, wxEXPAND|wxALL, 5);
+  }
+
+  # Work path
+  {
+    my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
+    my $label = Wx::StaticText->new ($dia,
+				     wxID_ANY,
+				     "Work Path",
+				     [ -1, -1 ],
+				     [ 100, 20 ],
+				    );
+    $hsizer->Add ($label, 0, wxALIGN_CENTER_VERTICAL);
+    $dia->{workpath_input} = Wx::DirPickerCtrl->new ($dia,
+						     wxID_ANY,
+						     "",
+						     "Please select your working directory",
+						     [ -1, -1 ],
+						     [ -1, -1 ],
+						     wxDIRP_USE_TEXTCTRL | wxDIRP_DIR_MUST_EXIST,
+						    );
+    $dia->{workpath_input}->SetPath ($config->{workpath});
+    $hsizer->Add ($dia->{workpath_input}, 1, wxEXPAND);
+    $vsizer->Add ($hsizer, 1, wxEXPAND|wxALL, 5);
+  }
+
+  my $bsizer = $dia->CreateButtonSizer (wxOK | wxCANCEL);
+  $vsizer->Add ($bsizer, 0, wxALIGN_CENTER_HORIZONTAL, 10);
+
+  $dia->SetSizer ($vsizer);
+  $vsizer->SetSizeHints ($dia);
+
+  my $res = $dia->ShowModal;
+  if ($res == wxID_OK) {
+    my $player = $dia->{player_input}->GetPath;
+    $config->{player} = $player if (-f $player);
+    my $path = $dia->{workpath_input}->GetPath;
+    $config->{workpath} = $path if (-d $path);
+  }
 }
 
 sub process_by_length {
@@ -577,21 +692,15 @@ sub user_confirm {
   }
 
   my $tsizer = Wx::BoxSizer->new (wxHORIZONTAL);
-  my $fileinfo = Wx::TextCtrl->new ($dia,
-				    wxID_ANY,
-				    file_info_string ($file),
-				    [ -1, -1 ],
-				    [ -1, -1 ],
-				    wxTE_MULTILINE|wxTE_READONLY|wxTR_ROW_LINES,
-				   );
+  my $fileinfo = Wx::StaticText->new ($dia,
+				      wxID_ANY,
+				      file_info_string ($file),
+				     );
   $tsizer->Add ($fileinfo, 1, wxEXPAND|wxALL, 0);
-  my $nextfileinfo = Wx::TextCtrl->new ($dia,
-					wxID_ANY,
-					file_info_string ($nextfile),
-					[ -1, -1 ],
-					[ -1, -1 ],
-					wxTE_MULTILINE|wxTE_READONLY|wxTR_ROW_LINES,
-				       );
+  my $nextfileinfo = Wx::StaticText->new ($dia,
+					  wxID_ANY,
+					  file_info_string ($nextfile),
+					 );
   $tsizer->Add ($nextfileinfo, 1, wxEXPAND|wxALL, 0);
   $sizer->Add ($tsizer, 0, wxEXPAND|wxALL, 4);
 
@@ -712,7 +821,11 @@ sub get_screenshot_by_mplayer {
 sub get_imghash {
   my ($file, $timer) = @_;
 
-  return $cache{$file}->{hash}->{$timer} if (exists ($cache{$file}->{hash}->{$timer}));
+  if (exists $pre_cache{$file}->{hash}->{$timer}
+      && $pre_cache{$file}->{hash}->{$timer}) {
+    $cache{$file}->{hash}->{$timer} = $pre_cache{$file}->{hash}->{$timer};
+    return $cache{$file}->{hash}->{$timer};
+  }
 
   my $imgfile = catfile ($cache{$file}->{cache_dir}, $timer . '.jpg');
   get_screenshot ($file, $timer, $imgfile) unless (-r $imgfile);
@@ -760,16 +873,6 @@ sub imghash_cmp {
     $odd = $odd >> 1;
   }
   $sum;
-}
-
-sub find_filter {
-  my $file = $File::Find::name;
-
-  return if (-d $file);
-
-  return unless (is_avfile ($file));
-
-  file_parse ($file);
 }
 
 sub file_info_string {
@@ -864,9 +967,6 @@ sub display_help {
           lenght: lowest level compare, just compare the video length
           auto: compare some screenshots in video automatically
           manual: compare some screenshots and display to user
-
-      -d --delete
-	prompt  user  for  files  to  preserve, deleting all others
 
       -v --verbose
 	display more debug infomations

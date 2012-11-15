@@ -17,9 +17,6 @@ Searches the given path for duplicate video files. Such files are found by compa
 
 = Options =
 
-* -r -recuse
-# include files residing in subdirectories
-
 * -s -symlinks
 # follow symlinked directories
 
@@ -34,12 +31,6 @@ Searches the given path for duplicate video files. Such files are found by compa
    lenght: lowest level compare, just compare the video length
    auto: compare some screenshots in video automatically
    manual: compare some screenshots and display to user
-
-* -n -no_gui
-#not start gui, that is, just start command line
-
-* -d --delete
-# prompt  user  for  files  to  preserve, deleting all others
 
 * -v --verbose
 # display more debug infomations
