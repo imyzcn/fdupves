@@ -107,19 +107,19 @@ sub load_default_conf {
 			    '.png',
 			   ],
 
-	     av_suffix => [
-			   ".avi",
-			   ".rmvb",
-			   ".rm",
-			   ".mp4",
-			   ".mkv",
-			   ".3gp",
-			   ".flv",
-			   ".vob",
-			   ".wmv",
-			   ".mov",
-			   ".swf",
-			  ],
+	     video_suffix => [
+			      ".avi",
+			      ".rmvb",
+			      ".rm",
+			      ".mp4",
+			      ".mkv",
+			      ".3gp",
+			      ".flv",
+			      ".vob",
+			      ".wmv",
+			      ".mov",
+			      ".swf",
+			     ],
 
 	     compare_count => 4,
 
@@ -147,7 +147,7 @@ sub load_file_conf {
 
   for my $k (keys %{$ini->{_}}) {
 
-    if ($k eq 'av_suffix'
+    if ($k eq 'video_suffix'
 	|| $k eq 'img_suffix'
 	|| $k eq 'hash_size'
 	|| $k eq 'thumb_size'
@@ -176,7 +176,7 @@ sub save_file_conf {
   my $ini = Config::Tiny->new;
 
   for my $k (keys %{$config}) {
-    if ($k eq 'av_suffix'
+    if ($k eq 'video_suffix'
 	|| $k eq 'img_suffix'
 	|| $k eq 'hash_size'
 	|| $k eq 'thumb_size'
@@ -348,25 +348,23 @@ sub ui_childarea_new {
 					 [ -1, -1 ],
 					 [ 400, 300 ],
 					);
-  $sizer->Add ($self->{dir_list}, 1, wxEXPAND|wxALL, 5);
+  $sizer->Add ($self->{dir_list}, 1, wxEXPAND|wxALL, 30);
 
   # Tempory method
-  {
-    my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
-    my $label = Wx::StaticText->new ($self,
-				     wxID_ANY,
-				     "Default find method"
-				    );
-    $hsizer->Add ($label, 1, wxEXPAND);
-    $self->{method_input} = Wx::Choice->new ($self,
-					     wxID_ANY,
-					     [ -1, -1 ],
-					     [ 200, 25 ],
-					     [ 'length', 'auto', 'manual' ],
-					    );
-    $hsizer->Add ($self->{method_input}, 1, wxEXPAND);
-    $sizer->Add ($hsizer, 0, wxEXPAND|wxHORIZONTAL);
-  }
+  my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
+  $label = Wx::StaticText->new ($self,
+				wxID_ANY,
+				"Default find method"
+			       );
+  $hsizer->Add ($label, 1, wxEXPAND);
+  $self->{method_input} = Wx::Choice->new ($self,
+					   wxID_ANY,
+					   [ -1, -1 ],
+					   [ 200, 25 ],
+					   [ 'length', 'auto', 'manual' ],
+					  );
+  $hsizer->Add ($self->{method_input}, 0);
+  $sizer->Add ($hsizer, 0, wxEXPAND|wxHORIZONTAL);
 
   $self->{vsizer}->Add ($sizer, 1, wxEXPAND|wxALL, 5);
 
@@ -472,7 +470,7 @@ sub but_pref_clicked {
 						   );
     $dia->{player_input}->SetPath ($config->{player});
     $hsizer->Add ($dia->{player_input}, 1, wxEXPAND);
-    $vsizer->Add ($hsizer, 1, wxEXPAND|wxALL, 5);
+    $vsizer->Add ($hsizer, 0, wxEXPAND|wxALL, 5);
   }
 
   # Work path
@@ -495,8 +493,50 @@ sub but_pref_clicked {
 						    );
     $dia->{workpath_input}->SetPath ($config->{workpath});
     $hsizer->Add ($dia->{workpath_input}, 1, wxEXPAND);
-    $vsizer->Add ($hsizer, 1, wxEXPAND|wxALL, 5);
+    $vsizer->Add ($hsizer, 0, wxEXPAND|wxALL, 5);
   }
+
+  # Video suffix
+  {
+    my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
+    my $label = Wx::StaticText->new ($dia,
+				     wxID_ANY,
+				     "Video Suffix",
+				     [ -1, -1 ],
+				     [ 100, 20 ],
+				    );
+    $hsizer->Add ($label, 0, wxALIGN_CENTER_VERTICAL);
+    my $value = join ' ', @{$config->{video_suffix}};
+    $dia->{video_suffix_input} = Wx::TextCtrl->new ($dia,
+						    wxID_ANY,
+						    $value,
+						   );
+    $dia->{video_suffix_input}->SetValue ($value);
+    $hsizer->Add ($dia->{video_suffix_input}, 1, wxEXPAND);
+    $vsizer->Add ($hsizer, 0, wxEXPAND|wxALL, 5);
+  }
+
+  # Video Length Matrix
+  {    my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
+       my $label = Wx::StaticText->new ($dia,
+					wxID_ANY,
+					"Work Path",
+					[ -1, -1 ],
+					[ 100, 20 ],
+				       );
+       $hsizer->Add ($label, 0, wxALIGN_CENTER_VERTICAL);
+       my @str;
+       for (@{$config->{video_timers}}) {
+	 push @str, join ',', @{$_};
+       }
+       my $value = join ' ', @str;
+       $dia->{video_matrix_input} = Wx::TextCtrl->new ($dia,
+						       wxID_ANY,
+						       $value,
+						      );
+       $hsizer->Add ($dia->{video_matrix_input}, 1, wxEXPAND);
+       $vsizer->Add ($hsizer, 1, wxEXPAND|wxALL, 5);
+     }
 
   my $bsizer = $dia->CreateButtonSizer (wxOK | wxCANCEL);
   $vsizer->Add ($bsizer, 0, wxALIGN_CENTER_HORIZONTAL, 10);
@@ -905,8 +945,8 @@ sub file_parse {
 
 sub is_avfile {
   my $file = shift;
-  my (undef, undef, $suffix) = fileparse ($file, @{$config->{av_suffix}});
-  return 1 if ("\L$suffix\E" ~~ @{$config->{av_suffix}});
+  my (undef, undef, $suffix) = fileparse ($file, @{$config->{video_suffix}});
+  return 1 if ("\L$suffix\E" ~~ @{$config->{video_suffix}});
   0;
 }
 
