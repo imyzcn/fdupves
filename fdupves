@@ -17,7 +17,7 @@ use Digest::SHA qw/sha1_hex/;
 
 use User;
 use Wx qw(:everything);
-use Wx::Event qw/EVT_CLOSE EVT_TOOL EVT_CHOICE/;
+use Wx::Event qw/EVT_CLOSE EVT_TOOL EVT_LIST_KEY_DOWN EVT_CHOICE/;
 
 # GLobal configurations
 my $config;
@@ -289,6 +289,22 @@ sub display_sames {
   $self->{res_tree}->ExpandAll;
 }
 
+sub gui_onabout {
+  my ($self) = @_;
+  my $info = Wx::AboutDialogInfo->new;
+
+  $info->SetName ('fdupves');
+  $info->SetVersion ('0.0.1');
+  $info->SetDescription ('find duplicate video/image files');
+  $info->SetCopyright ('(c) 2012-2013 Alf <naihe2010@126.com>');
+  $info->SetWebSite ('http://blog.sina.com.cn/naihe2010', 'The blog of Alf');
+  $info->AddDeveloper ('Alf <naihe2010@126.org>');
+
+  $info->SetArtists (['Alf <naihe2010@126.com>']);
+
+  Wx::AboutBox ($info);
+}
+
 sub gui_onclose {
   my ($self, $ev) = @_;
   Wx::Log::SetActiveTarget ($self->{old_log});
@@ -299,7 +315,7 @@ sub gui_init {
   my $app = Wx::SimpleApp->new;
   my $frame = Wx::Frame->new (undef,
 			      wxID_ANY,
-			      "fdupves - find duplicate video files",
+			      "fdupves - find duplicate video/image files",
 			      wxDefaultPosition,
 			      [800, 600]
 			     );
@@ -324,6 +340,7 @@ sub ui_toolbar_new {
 		  ['Add', \&but_add_clicked, 'add directories for find'],
 		  ['Find', \&but_find_clicked, 'find duplicate video files'],
 		  ['Preference', \&but_pref_clicked, 'set preference'],
+		  ['About', \&gui_onabout, 'about fdupves'],
 		 );
 
   for (0 .. @toolbars - 1) {
@@ -360,8 +377,11 @@ sub ui_childarea_new {
 
   my $sizer = Wx::BoxSizer->new (wxVERTICAL);
 
-  $self->{dir_list} = Wx::ListCtrl->new ($panel);
+  $self->{dir_list} = Wx::ListView->new ($panel);
+  $self->{dir_list}->InsertColumn (0, "", wxLIST_FORMAT_LEFT);
   $sizer->Add ($self->{dir_list}, 1, wxEXPAND|wxALL, 5);
+
+  EVT_LIST_KEY_DOWN ($self->{dir_list}, $self->{dir_list}, \&dirlist_onkeydown);
 
   # Tempory method
   my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
@@ -404,13 +424,18 @@ sub ui_childarea_new {
   $sizer->Fit ($panel);
   $sizer->SetSizeHints ($panel);
 
-  $findnb->AddPage ($panel, 'Find', 0);
+  $findnb->AddPage ($panel, 'Source Files', 0);
 
   $self->{res_tree} = Wx::TreeCtrl->new ($resnb);
   $resnb->AddPage ($self->{res_tree}, 'Same Files', 0);
 
   $split1->SplitVertically ($split2, $resnb, 300);
   $split2->SplitHorizontally ($findnb, $text, 400);
+}
+
+sub dirlist_onkeydown {
+  my ($self, $ev) = @_;
+  Wx::LogMessage ("$self: $ev");
 }
 
 sub method_onchoice {
@@ -435,7 +460,6 @@ sub but_add_clicked {
   my $res = $dia->ShowModal;
   if ($res == wxID_OK) {
     push @dir, $dia->GetPath;
-
     my $item = Wx::ListItem->new;
     $item->SetText ($dia->GetPath);
     $self->{dir_list}->InsertItem ($item);
