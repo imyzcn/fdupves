@@ -17,7 +17,7 @@ use Digest::SHA qw/sha1_hex/;
 
 use User;
 use Wx qw(:everything);
-use Wx::Event qw/EVT_TOOL EVT_CHOICE/;
+use Wx::Event qw/EVT_CLOSE EVT_TOOL EVT_CHOICE/;
 
 # GLobal configurations
 my $config;
@@ -228,7 +228,10 @@ sub process_dir {
     }
   }
 
-  die "no enough av files to process" if (keys %cache < 2);
+  if (keys %cache < 2) {
+    Wx::LogWarning "no enough av files to process";
+    return;
+  }
 
   if ($config->{method} eq 'length') {
     process_by_length ($self);
@@ -245,7 +248,7 @@ sub walk_dir {
   while (my $dir = pop @dirs) {
     local *DH;
     if (!opendir (DH, $dir)) {
-      print "Cannot opendir $dir: $!";
+      Wx::LogWarning "Cannot opendir $dir: $!";
       next;
     }
     foreach (readdir (DH)) {
@@ -288,12 +291,18 @@ sub display_sames {
   $self->{res_tree}->ExpandAll;
 }
 
+sub gui_onclose {
+  my ($self, $ev) = @_;
+  Wx::Log::SetActiveTarget ($self->{old_log});
+  $ev->Skip;
+}
+
 sub gui_init {
   my $app = Wx::SimpleApp->new;
   my $frame = Wx::Frame->new (undef,
 			      -1,
 			      "fdupves - find duplicate video files",
-			      [-1, -1],
+			      wxDefaultPosition,
 			      [1024, 728]
 			     );
 
@@ -331,44 +340,62 @@ sub ui_toolbar_new {
 sub ui_childarea_new {
   my $self = shift;
 
-  $self->{vsizer} = Wx::BoxSizer->new (wxHORIZONTAL);
+  my $split1 = Wx::SplitterWindow->new
+    ($self, -1, wxDefaultPosition, wxDefaultSize,
+     wxNO_FULL_REPAINT_ON_RESIZE|wxCLIP_CHILDREN);
+  my $split2 = Wx::SplitterWindow->new
+    ($split1, -1, wxDefaultPosition, wxDefaultSize,
+     wxNO_FULL_REPAINT_ON_RESIZE|wxCLIP_CHILDREN);
+  my $resnb = Wx::Notebook->new
+    ($split1, -1, wxDefaultPosition, wxDefaultSize,
+     wxNO_FULL_REPAINT_ON_RESIZE|wxCLIP_CHILDREN);
+  my $findnb = Wx::Notebook->new
+    ($split2, -1, wxDefaultPosition, wxDefaultSize,
+     wxNO_FULL_REPAINT_ON_RESIZE|wxCLIP_CHILDREN);
+  my $text = Wx::TextCtrl->new
+    ($split2, -1, "", wxDefaultPosition, wxDefaultSize,
+     wxTE_READONLY|wxTE_MULTILINE|wxNO_FULL_REPAINT_ON_RESIZE);
+
+  my $panel = Wx::Panel->new
+    ($findnb, -1, wxDefaultPosition, wxDefaultSize,
+     wxNO_FULL_REPAINT_ON_RESIZE|wxCLIP_CHILDREN);
 
   my $sizer = Wx::BoxSizer->new (wxVERTICAL);
 
-  my $label = Wx::StaticText->new ($self,
-				   wxID_ANY,
-				   "Media Files",
-				   [ -1, -1 ],
-				   [ 400, 25 ],
-				  );
-  $sizer->Add ($label, 0, wxEXPAND|wxHORIZONTAL, 10);
-
-  $self->{dir_list} = Wx::ListCtrl->new ($self,
+  $self->{dir_list} = Wx::ListCtrl->new ($panel,
 					 -1,
-					 [ -1, -1 ],
-					 [ 400, 300 ],
 					);
-  $sizer->Add ($self->{dir_list}, 1, wxEXPAND|wxALL, 30);
+  $sizer->Add ($self->{dir_list}, 1, wxEXPAND|wxALL, 5);
 
   # Tempory method
   my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
-  $label = Wx::StaticText->new ($self,
-				wxID_ANY,
-				"Default find method"
-			       );
+  my $label = Wx::StaticText->new ($panel,
+				   wxID_ANY,
+				   "Default find method"
+				  );
   $hsizer->Add ($label, 1, wxEXPAND);
-  $self->{method_input} = Wx::Choice->new ($self,
+
+  my @method = ('length', 'auto', 'manual');
+  $self->{method_input} = Wx::Choice->new ($panel,
 					   wxID_ANY,
 					   [ -1, -1 ],
 					   [ 200, 25 ],
-					   [ 'length', 'auto', 'manual' ],
+					   \@method,
 					  );
+  for (0 .. @method - 1) {
+    if ($config->{method} eq $method[$_]) {
+      $self->{method_input}->Select ($_);
+      last;
+    }
+  }
   $hsizer->Add ($self->{method_input}, 0);
-  $sizer->Add ($hsizer, 0, wxEXPAND|wxHORIZONTAL);
+  $sizer->Add ($hsizer, 0, 0, 10);
 
-  EVT_CHOICE ($self, $self->{method_input}, \&method_onchoice);
+  my $log = Wx::LogTextCtrl->new ($text);
+  $self->{old_log} = Wx::Log::SetActiveTarget ($log);
+  EVT_CLOSE ($self, \&gui_onclose);
 
-  $self->{vsizer}->Add ($sizer, 1, wxEXPAND|wxALL, 5);
+  EVT_CHOICE ($panel, $self->{method_input}, \&method_onchoice);
 
   # load the command line input directoies
   for (@dir) {
@@ -377,32 +404,25 @@ sub ui_childarea_new {
     $self->{dir_list}->InsertItem ($item);
   }
 
-  $sizer = Wx::BoxSizer->new (wxVERTICAL);
+  $panel->SetSizer ($sizer);
+  $sizer->Fit ($panel);
+  $sizer->SetSizeHints ($panel);
 
-  $label = Wx::StaticText->new ($self,
-				wxID_ANY,
-				"Same Files",
-				[ -1, -1 ],
-				[ 400, 25 ],
-			       );
-  $sizer->Add ($label, 0, wxEXPAND|wxHORIZONTAL, 10);
+  $findnb->AddPage ($panel, 'Find', 0);
 
-  $self->{res_tree} = Wx::TreeCtrl->new ($self,
-					 -1,
-					);
-  $sizer->Add ($self->{res_tree}, 1, wxEXPAND|wxALL, 5);
+  $self->{res_tree} = Wx::TreeCtrl->new ($resnb,
+					 -1);
+  $resnb->AddPage ($self->{res_tree}, 'Same Files', 0);
 
-  $self->{vsizer}->Add ($sizer, 1, wxEXPAND|wxALL, 5);
-
-  $self->SetSizerAndFit ($self->{vsizer});
-  $self->{vsizer}->SetSizeHints ($self);
+  $split1->SplitVertically ($split2, $resnb, 300);
+  $split2->SplitHorizontally ($findnb, $text, 400);
 }
 
 sub method_onchoice {
   my ($self, $ev) = @_;
 
   $config->{method} = $ev->GetString;
-  print "get string: $config->{method}\n";
+  Wx::LogMessage "set find method: $config->{method}";
 }
 
 sub ui_statusbar_new {
@@ -861,7 +881,7 @@ sub get_screenshot_by_mplayer {
     alarm 0;
   };
   if ($@) {
-    printf "ERROR: get file \'$file\' screenshot failed\n";
+    Wx::LogWarning "ERROR: get file \'$file\' screenshot failed\n";
   }
 
   move "00000001.jpg", $img;
@@ -981,7 +1001,7 @@ sub get_info_by_mplayer {
     alarm 0;
   };
   if ($@) {
-    printf "ERROR: \'$file\' get length error.\n";
+    Wx::LogWarning "ERROR: \'$file\' get length error.\n";
     return;
   }
 
