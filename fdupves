@@ -17,7 +17,7 @@ use Digest::SHA qw/sha1_hex/;
 
 use User;
 use Wx qw(:everything);
-use Wx::Event qw/EVT_TOOL/;
+use Wx::Event qw/EVT_TOOL EVT_CHOICE/;
 
 # GLobal configurations
 my $config;
@@ -366,6 +366,8 @@ sub ui_childarea_new {
   $hsizer->Add ($self->{method_input}, 0);
   $sizer->Add ($hsizer, 0, wxEXPAND|wxHORIZONTAL);
 
+  EVT_CHOICE ($self, $self->{method_input}, \&method_onchoice);
+
   $self->{vsizer}->Add ($sizer, 1, wxEXPAND|wxALL, 5);
 
   # load the command line input directoies
@@ -394,6 +396,13 @@ sub ui_childarea_new {
 
   $self->SetSizerAndFit ($self->{vsizer});
   $self->{vsizer}->SetSizeHints ($self);
+}
+
+sub method_onchoice {
+  my ($self, $ev) = @_;
+
+  $config->{method} = $ev->GetString;
+  print "get string: $config->{method}\n";
 }
 
 sub ui_statusbar_new {
