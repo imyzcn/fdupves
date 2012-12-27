@@ -5,7 +5,7 @@ use warnings;
 use strict;
 
 use Config::Tiny;
-use utf8;
+#use utf8;
 use Data::Dumper;
 use Getopt::Long;
 use File::Basename;
@@ -27,7 +27,6 @@ my @dir;
 my %pre_cache;
 my %cache;
 my %image_cache;
-my @same_files;
 
 # Script Starts here
 my $OsIsWin = 0;
@@ -99,10 +98,19 @@ sub load_default_conf {
 
 	     proc_image => 0,
 	     image_suffix => [
+			      '.bmp',
+			      '.gif',
 			      '.jpeg',
 			      '.jpg',
-			      '.bmp',
 			      '.png',
+			      'pcx',
+			      'pnm',
+			      'tif',
+			      'tga',
+			      'xpm',
+			      'ico',
+			      'cur',
+			      'ani',
 			     ],
 
 	     proc_video => 1,
@@ -210,13 +218,31 @@ sub process_dir {
     }
   }
 
-  if (keys %cache < 2) {
-    Wx::LogWarning "no enough av files to process";
-    return;
+  my @same_files;
+
+  if ($config->{proc_video}) {
+    if (keys %cache < 2) {
+      Wx::LogWarning "no enough video files to process";
+    } else {
+      my $samevideop = process_video ($self);
+      if (ref $samevideop eq 'ARRAY') {
+	push @same_files, @{$samevideop};
+      }
+    }
   }
 
-  process_video ($self);
-  process_image ($self);
+  if ($config->{proc_image}) {
+    if (keys %image_cache < 2) {
+      Wx::LogWarning "no enough image files to process";
+    } else {
+      my $sameimagep = process_image ($self);
+      if (ref $sameimagep eq 'ARRAY') {
+	push @same_files, @{$sameimagep};
+      }
+    }
+  }
+
+  \@same_files;
 }
 
 sub walk_dir {
@@ -239,7 +265,7 @@ sub walk_dir {
       if (-d $file) {
 	push (@dirs, $file);
       } elsif (-f $file) {
-	&$callback ($file) if (is_video ($file));
+	&$callback ($file);
       }
     }
 
@@ -248,14 +274,14 @@ sub walk_dir {
 }
 
 sub display_sames {
-  my $self = shift;
+  my ($self, $samefilep) = @_;
 
   # Clear the result tree first
   $self->{res_tree}->DeleteAllItems;
 
   my $root = $self->{res_tree}->AddRoot ('');
 
-  for my $samefilesp (@same_files) {
+  for my $samefilesp (@{$samefilep}) {
     my $parent = $self->{res_tree}->AppendItem ($root, $samefilesp->[0]);
     for my $id (1 .. @{$samefilesp} - 1) {
       $self->{res_tree}->AppendItem ($parent,
@@ -437,10 +463,21 @@ sub but_find_clicked {
     $mes->ShowModal;
     return;
   }
+  unless ($config->{proc_image} || $config->{proc_video}) {
+    my $mes = Wx::MessageDialog->new ($self,
+				      "Please check process image/video.",
+				      "Warn",
+				      wxOK | wxICON_HAND | wxSTAY_ON_TOP
+				     );
+    $mes->ShowModal;
+    return;
+  }
 
-  process_dir ($self);
+  my $samefilep = process_dir ($self);
+  return unless ($samefilep);
 
-  display_sames ($self);
+  Wx::LogMessage "Totally find %d groups of the same files", scalar @{$samefilep};
+  display_sames ($self, $samefilep);
 }
 
 sub but_pref_clicked {
@@ -572,6 +609,7 @@ sub but_pref_clicked {
 sub process_video {
   my $self = shift;
   my $sort_group_files = &sort_img_by_similar;
+  my @same_videos;
 
   for my $sort_files (@$sort_group_files) {
     for my $file (@{$sort_files}) {
@@ -603,7 +641,7 @@ sub process_video {
 
       # find the previous duplicate files
       my $has_find = 0;
-      for my $sfs (@same_files) {
+      for my $sfs (@same_videos) {
 	for my $curfile (@{$sfs}) {
 	  if ($curfile eq $file) {
 	    push @{$sfs}, $nextfile unless (grep { $nextfile eq $_ } @{$sfs});
@@ -614,14 +652,18 @@ sub process_video {
 
       unless ($has_find) {
 	my @sfs = ($file, $nextfile);
-	push @same_files, \@sfs;
+	push @same_videos, \@sfs;
       }
     }
   }
+
+  Wx::LogMessage "Find %d groups of the same videos", scalar @same_videos;
+  \@same_videos;
 }
 
 sub process_image {
   my @files = keys %image_cache;
+  my @same_images;
 
   for my $id ( 0 .. @files - 2) {
     my $file = $files[$id];
@@ -631,7 +673,7 @@ sub process_image {
 
     for my $nextid ($id + 1 .. @files - 1) {
       my $nextfile = $files[$nextid];
-      my $nexthash = $image_cache{$nextfile};
+      my $nexthash = $image_cache{$nextfile}->{hash};
       my $cmp = imghash_cmp ($hash, $nexthash);
       if ($cmp < $min) {
 	$image_cache{$file}->{min_file} = $nextfile;
@@ -649,7 +691,7 @@ sub process_image {
   for my $file (@similar_files) {
     my $nextfile = $image_cache{$file}->{min_file};
     my $has_find = 0;
-    for my $sfs (@same_files) {
+    for my $sfs (@same_images) {
       for my $curfile (@{$sfs}) {
 	if ($curfile eq $file) {
 	  push @{$sfs}, $nextfile unless (grep { $nextfile eq $_ } @{$sfs});
@@ -658,10 +700,13 @@ sub process_image {
       }
     }
     unless ($has_find) {
-      my @sfs = ($_, image_cache{$_}->{min_file});
-      push @same_files, \@sfs;
+      my @sfs = ($file, $image_cache{$file}->{min_file});
+      push @same_images, \@sfs;
     }
   }
+
+  Wx::LogMessage "Find %d groups of the same images", scalar @same_images;
+  \@same_images;
 }
 
 sub user_confirm {
@@ -860,7 +905,7 @@ sub get_filetime_hash {
 sub get_image_hash {
   my $imgfile = shift;
 
-  my $img = Wx::Image->new ($imgfile, wxBITMAP_TYPE_JPEG);
+  my $img = Wx::Image->new ($imgfile, wxBITMAP_TYPE_ANY);
   $img->Rescale (@{$config->{hash_size}});
 
   my @phrase;
@@ -874,6 +919,7 @@ sub get_image_hash {
       push @phrase, $ch;
     }
   }
+  return unless (@phrase);
 
   my $sum = 0;
   for (@phrase) {
