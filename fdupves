@@ -17,7 +17,7 @@ use Digest::SHA qw/sha1_hex/;
 
 use User;
 use Wx qw(:everything);
-use Wx::Event qw/EVT_CLOSE EVT_TOOL EVT_LIST_KEY_DOWN EVT_CHOICE/;
+use Wx::Event qw/EVT_CLOSE EVT_TOOL EVT_CHECKLISTBOX/;
 
 # GLobal configurations
 my $config;
@@ -26,6 +26,7 @@ my $config;
 my @dir;
 my %pre_cache;
 my %cache;
+my %image_cache;
 my @same_files;
 
 # Script Starts here
@@ -43,10 +44,7 @@ my $CacheFile = catfile ($UserHome, '.fdupves.cache');
 # First, parse the configuration file
 &load_file_conf or die "Load configuration file error\n";
 
-# Second, parse the command line option
-&load_cmd_conf or die "Load command line options error\n";
-
-# Set src file list from command line
+# Second, set src file list from command line
 for (@ARGV) {
   $_ =~ s/^\~/$UserHome/;
   $_ = File::Spec->rel2abs ($_) unless (file_name_is_absolute ($_));
@@ -95,18 +93,19 @@ sub load_default_conf {
   $config = {
 	     symlinks => 0,
 	     workpath => "~/.fdupves.d/cache",
-	     method => "auto",
 	     yes => 0,
 	     verbose => 0,
 	     player => 'mplayer',
 
-	     img_suffix => [
-			    '.jpeg',
-			    '.jpg',
-			    '.bmp',
-			    '.png',
-			   ],
+	     proc_image => 0,
+	     image_suffix => [
+			      '.jpeg',
+			      '.jpg',
+			      '.bmp',
+			      '.png',
+			     ],
 
+	     proc_video => 1,
 	     video_suffix => [
 			      ".avi",
 			      ".rmvb",
@@ -148,7 +147,7 @@ sub load_file_conf {
   for my $k (keys %{$ini->{_}}) {
 
     if ($k eq 'video_suffix'
-	|| $k eq 'img_suffix'
+	|| $k eq 'image_suffix'
 	|| $k eq 'hash_size'
 	|| $k eq 'thumb_size'
        ) {
@@ -177,7 +176,7 @@ sub save_file_conf {
 
   for my $k (keys %{$config}) {
     if ($k eq 'video_suffix'
-	|| $k eq 'img_suffix'
+	|| $k eq 'image_suffix'
 	|| $k eq 'hash_size'
 	|| $k eq 'thumb_size'
        ) {
@@ -198,25 +197,8 @@ sub save_file_conf {
   $ini->write ($ConfFile);
 }
 
-sub load_cmd_conf {
-  GetOptions (
-	      "symlinks" => \$config->{symlinks},
-	      "C|workpath=s" => \$config->{workpath},
-	      "yes" => \$config->{yes},
-	      "method=s" => \$config->{method},
-	      "verbose"  => \$config->{verbose},
-	      "player=s" => \$config->{player},
-	      "help" => sub { &display_help; exit; },
-	     );
-}
-
 sub process_dir {
   my $self = shift;
-  if ($config->{method} ne 'length'
-      && $config->{method} ne 'auto'
-      && $config->{method} ne 'manual') {
-    die "Method option is not set correctly";
-  }
 
   for (@dir) {
     next if (-l $_ && (not $config->{symlinks}));
@@ -224,7 +206,7 @@ sub process_dir {
     if (-d $_) {
       walk_dir (\&file_parse, $_);
     } elsif (-f $_) {
-      file_parse ($_) if (is_avfile ($_));
+      file_parse ($_);
     }
   }
 
@@ -233,13 +215,8 @@ sub process_dir {
     return;
   }
 
-  if ($config->{method} eq 'length') {
-    process_by_length ($self);
-  } elsif ($config->{method} eq 'auto') {
-    process_auto ($self);
-  } elsif ($config->{method} eq 'manual') {
-    process_manual ($self);
-  }
+  process_video ($self);
+  process_image ($self);
 }
 
 sub walk_dir {
@@ -262,7 +239,7 @@ sub walk_dir {
       if (-d $file) {
 	push (@dirs, $file);
       } elsif (-f $file) {
-	&$callback ($file) if (is_avfile ($file));
+	&$callback ($file) if (is_video ($file));
       }
     }
 
@@ -378,46 +355,31 @@ sub ui_childarea_new {
   my $sizer = Wx::BoxSizer->new (wxVERTICAL);
 
   $self->{dir_list} = Wx::ListView->new ($panel);
-  $self->{dir_list}->InsertColumn (0, "", wxLIST_FORMAT_LEFT);
-  $sizer->Add ($self->{dir_list}, 1, wxEXPAND|wxALL, 5);
+  $self->{dir_list}->InsertColumn (0, "", wxLIST_FORMAT_LEFT, 300);
+  $sizer->Add ($self->{dir_list}, 1, wxEXPAND|wxALL, 0);
 
-  EVT_LIST_KEY_DOWN ($self->{dir_list}, $self->{dir_list}, \&dirlist_onkeydown);
+  #  EVT_LIST_KEY_DOWN ($self->{dir_list}, $self->{dir_list}, \&dirlist_onkeydown);
 
-  # Tempory method
   my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
-  my $label = Wx::StaticText->new ($panel,
-				   wxID_ANY,
-				   "Default find method"
-				  );
-  $hsizer->Add ($label, 1, wxEXPAND);
+  $self->{proc_type} = Wx::CheckListBox->new
+    ($panel, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+     ['Image', 'Video']
+    );
+  $hsizer->Add ($self->{proc_type}, 1, wxEXPAND|wxALL, 0);
 
-  my @method = ('length', 'auto', 'manual');
-  $self->{method_input} = Wx::Choice->new ($panel,
-					   wxID_ANY,
-					   wxDefaultPosition,
-					   [ 200, 25 ],
-					   \@method,
-					  );
-  for (0 .. @method - 1) {
-    if ($config->{method} eq $method[$_]) {
-      $self->{method_input}->Select ($_);
-      last;
-    }
-  }
-  $hsizer->Add ($self->{method_input}, 0);
-  $sizer->Add ($hsizer, 0, 0, 10);
+  $sizer->Add ($hsizer, 0, wxEXPAND|wxHORIZONTAL, 0);
+
+  $self->{proc_type}->Check (0, $config->{proc_image});
+  $self->{proc_type}->Check (1, $config->{proc_video});
+  EVT_CHECKLISTBOX ($self->{proc_type}, $self->{proc_type}, \&proctype_oncheck);
 
   my $log = Wx::LogTextCtrl->new ($text);
   $self->{old_log} = Wx::Log::SetActiveTarget ($log);
   EVT_CLOSE ($self, \&gui_onclose);
 
-  EVT_CHOICE ($panel, $self->{method_input}, \&method_onchoice);
-
   # load the command line input directoies
   for (@dir) {
-    my $item = Wx::ListItem->new;
-    $item->SetText ($_);
-    $self->{dir_list}->InsertItem ($item);
+    $self->{dir_list}->InsertStringItem (@dir - 1, $_);
   }
 
   $panel->SetSizer ($sizer);
@@ -433,16 +395,15 @@ sub ui_childarea_new {
   $split2->SplitHorizontally ($findnb, $text, 400);
 }
 
+sub proctype_oncheck {
+  my ($self, $ev) = @_;
+  $config->{proc_image} = $self->IsChecked (0);
+  $config->{proc_video} = $self->IsChecked (1);
+}
+
 sub dirlist_onkeydown {
   my ($self, $ev) = @_;
   Wx::LogMessage ("$self: $ev");
-}
-
-sub method_onchoice {
-  my ($self, $ev) = @_;
-
-  $config->{method} = $ev->GetString;
-  Wx::LogMessage "set find method: $config->{method}";
 }
 
 sub ui_statusbar_new {
@@ -460,9 +421,7 @@ sub but_add_clicked {
   my $res = $dia->ShowModal;
   if ($res == wxID_OK) {
     push @dir, $dia->GetPath;
-    my $item = Wx::ListItem->new;
-    $item->SetText ($dia->GetPath);
-    $self->{dir_list}->InsertItem ($item);
+    $self->{dir_list}->InsertStringItem (@dir - 1, $dia->GetPath);
   }
 }
 
@@ -535,6 +494,25 @@ sub but_pref_clicked {
     $vsizer->Add ($hsizer, 0, wxEXPAND|wxALL, 5);
   }
 
+  # Image suffix
+  {
+    my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
+    my $label = Wx::StaticText->new
+      ($dia, wxID_ANY,
+       "Image Suffix",
+       wxDefaultPosition, [ 100, 20 ],
+      );
+    $hsizer->Add ($label, 0, wxALIGN_CENTER_VERTICAL);
+    my $value = join ' ', @{$config->{image_suffix}};
+    $dia->{image_suffix_input} = Wx::TextCtrl->new ($dia,
+						    wxID_ANY,
+						    $value,
+						   );
+    $dia->{image_suffix_input}->SetValue ($value);
+    $hsizer->Add ($dia->{image_suffix_input}, 1, wxEXPAND);
+    $vsizer->Add ($hsizer, 0, wxEXPAND|wxALL, 5);
+  }
+
   # Video suffix
   {
     my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
@@ -591,39 +569,7 @@ sub but_pref_clicked {
   }
 }
 
-sub process_by_length {
-  my $self = shift;
-
-  my @sort_list = sort {
-    $cache{$a}->{info}->{length}
-      <=> $cache{$b}->{info}->{length}
-    } keys %cache;
-
-  my $curid = 0;
-  for my $id (0 .. @sort_list - 2) {
-    next if ($id < $curid);
-
-    my $file = $sort_list[$id];
-    my @samefiles = ($file);
-
-    for my $nextid ($id + 1 .. @sort_list - 1) {
-      $curid = $nextid;
-
-      my $nextfile = $sort_list[$nextid];
-      if ($cache{$file}->{info}->{length} == $cache{$nextfile}->{info}->{length}) {
-	push @samefiles, $nextfile;
-      } else {
-	last;
-      }
-    }
-
-    if (@samefiles > 1) {
-      push @same_files, \@samefiles;
-    }
-  }
-}
-
-sub process_auto {
+sub process_video {
   my $self = shift;
   my $sort_group_files = &sort_img_by_similar;
 
@@ -647,8 +593,8 @@ sub process_auto {
 	    - $cache{$file}->{min_chunk}
 	      - $_ * $interval if ($cache{$file}->{min_type} == 1);
 
-	my $hasha = get_imghash ($file, $ss);
-	my $hashb = get_imghash ($nextfile, $ss);
+	my $hasha = get_filetime_hash ($file, $ss);
+	my $hashb = get_filetime_hash ($nextfile, $ss);
 	if (imghash_cmp ($hasha, $hashb) > 5) {
 	  $equ = 0;
 	  last;
@@ -674,59 +620,46 @@ sub process_auto {
   }
 }
 
-sub process_manual {
-  my $self = shift;
-  my $sort_group_files = &sort_img_by_similar;
+sub process_image {
+  my @files = keys %image_cache;
 
-  for my $sort_files (@$sort_group_files) {
-    for my $file (@{$sort_files}) {
-      # break when hash distance >5
-      last if ($cache{$file}->{min_hash} > 5);
+  for my $id ( 0 .. @files - 2) {
+    my $file = $files[$id];
+    my $hash = $image_cache{$file}->{hash};
+    my $min = $config->{hash_size}->[0] * $config->{hash_size}->[1];
+    $min = $image_cache{$file}->{min_hash} if ($image_cache{$file}->{min_file});
 
-      my $nextfile = $cache{$file}->{min_file};
-
-      my $shorter = $cache{$file}->{info}->{length};
-      $shorter = $cache{$nextfile}->{info}->{length} if ($cache{$nextfile}->{info}->{length}
-							 < $shorter);
-      my $interval = $shorter / ($config->{compare_count});
-
-      my @inputs;
-      for (0 .. $config->{compare_count} - 1) {
-	my $ss = $cache{$file}->{min_chunk} + $_ * $interval;
-	$ss =
-	  $cache{$file}->{info}->{length}
-	    - $cache{$file}->{min_chunk}
-	      - $_ * $interval if ($cache{$file}->{min_type} == 1);
-	my $pica = catfile ($cache{$file}->{cache_dir},
-			    $ss . ".jpg");
-	get_screenshot ($file, $ss, $pica) unless (-r $pica);
-	push @inputs, $pica;
-
-	my $picb = catfile ($cache{$nextfile}->{cache_dir},
-			    $ss . ".jpg");
-	get_screenshot ($nextfile, $ss, $picb) unless (-r $picb);
-	push @inputs, $picb;
+    for my $nextid ($id + 1 .. @files - 1) {
+      my $nextfile = $files[$nextid];
+      my $nexthash = $image_cache{$nextfile};
+      my $cmp = imghash_cmp ($hash, $nexthash);
+      if ($cmp < $min) {
+	$image_cache{$file}->{min_file} = $nextfile;
+	$image_cache{$file}->{min_hash} = $cmp;
+	$min = $cmp;
       }
+    }
+  }
 
-      my $yes = user_confirm ($self, $file, $nextfile, \@inputs);
+  my @similar_files = grep {
+    defined $image_cache{$_}->{min_hash}
+      && $image_cache{$_}->{min_hash} < 5
+    } @files;
 
-      next unless ($yes);
-
-      # find the previous duplicate files
-      my $has_find = 0;
-      for my $sfs (@same_files) {
-	for my $curfile (@{$sfs}) {
-	  if ($curfile eq $file) {
-	    push @{$sfs}, $nextfile;
-	    $has_find = 1;
-	  }
+  for my $file (@similar_files) {
+    my $nextfile = $image_cache{$file}->{min_file};
+    my $has_find = 0;
+    for my $sfs (@same_files) {
+      for my $curfile (@{$sfs}) {
+	if ($curfile eq $file) {
+	  push @{$sfs}, $nextfile unless (grep { $nextfile eq $_ } @{$sfs});
+	  $has_find = 1;
 	}
       }
-
-      unless ($has_find) {
-	my @sfs = ($file, $nextfile);
-	push @same_files, \@sfs;
-      }
+    }
+    unless ($has_find) {
+      my @sfs = ($_, image_cache{$_}->{min_file});
+      push @same_files, \@sfs;
     }
   }
 }
@@ -825,8 +758,8 @@ sub sort_img_by_similar {
     my $hassame = 0;
     for my $id (0 .. @files - 2) {
       my $file = $files[$id];
-      my $beginhash = get_imghash ($file, $chunk);
-      my $endhash = get_imghash ($file, $cache{$file}->{info}->{length} - $chunk);
+      my $beginhash = get_filetime_hash ($file, $chunk);
+      my $endhash = get_filetime_hash ($file, $cache{$file}->{info}->{length} - $chunk);
 
       my $min = $config->{hash_size}->[0] * $config->{hash_size}->[1];
       $min = $cache{$file}->{min_hash} if ($cache{$file}->{min_file});
@@ -838,8 +771,8 @@ sub sort_img_by_similar {
 	next if (exists $compared_files{$compkey});
 	$compared_files{$compkey} = 1;
 
-	my $nextbeginhash = get_imghash ($nextfile, $chunk);
-	my $nextendhash = get_imghash ($nextfile, $cache{$nextfile}->{info}->{length} - $chunk);
+	my $nextbeginhash = get_filetime_hash ($nextfile, $chunk);
+	my $nextendhash = get_filetime_hash ($nextfile, $cache{$nextfile}->{info}->{length} - $chunk);
 
 	my $begin = imghash_cmp ($beginhash, $nextbeginhash);
 	if ($begin < $min) {
@@ -905,7 +838,7 @@ sub get_screenshot_by_mplayer {
   move "00000001.jpg", $img;
 }
 
-sub get_imghash {
+sub get_filetime_hash {
   my ($file, $timer) = @_;
 
   if (exists $pre_cache{$file}->{hash}->{$timer}
@@ -918,6 +851,14 @@ sub get_imghash {
   get_screenshot ($file, $timer, $imgfile) unless (-r $imgfile);
 
   return unless (-r $imgfile);
+
+  my $bin = get_image_hash ($imgfile);
+
+  $cache{$file}->{hash}->{$timer} = $bin;
+}
+
+sub get_image_hash {
+  my $imgfile = shift;
 
   my $img = Wx::Image->new ($imgfile, wxBITMAP_TYPE_JPEG);
   $img->Rescale (@{$config->{hash_size}});
@@ -945,7 +886,7 @@ sub get_imghash {
     $bin |= (1 << $_) if ($phrase[$_] >= $avg);
   }
 
-  $cache{$file}->{hash}->{$timer} = $bin;
+  return $bin;
 }
 
 sub imghash_cmp {
@@ -977,6 +918,16 @@ sub file_info_string {
 sub file_parse {
   my $file = shift;
 
+  if ($config->{proc_video} && is_video ($file)) {
+    video_file_parse ($file);
+  } elsif ($config->{proc_image} && is_image ($file)) {
+    image_file_parse ($file);
+  }
+}
+
+sub video_file_parse {
+  my $file = shift;
+
   my $info = get_info ($file);
   return unless ($info);
 
@@ -990,10 +941,23 @@ sub file_parse {
   $nodes{cache_dir} = catdir ($config->{workpath}, substr ($phrase, 0, 2), $phrase);
 }
 
-sub is_avfile {
+sub image_file_parse {
+  my $file = shift;
+
+  $image_cache{$file}->{hash} = get_image_hash ($file) unless (exists $image_cache{$file});
+}
+
+sub is_video {
   my $file = shift;
   my (undef, undef, $suffix) = fileparse ($file, @{$config->{video_suffix}});
   return 1 if ("\L$suffix\E" ~~ @{$config->{video_suffix}});
+  0;
+}
+
+sub is_image {
+  my $file = shift;
+  my (undef, undef, $suffix) = fileparse ($file, @{$config->{image_suffix}});
+  return 1 if ("\L$suffix\E" ~~ @{$config->{image_suffix}});
   0;
 }
 
@@ -1035,32 +999,4 @@ sub get_info_by_mplayer {
     }
   }
   return \%info;
-}
-
-sub display_help {
-  my $str = "
-    fdupves is a Perl script for finding duplicate video files in a given set of directories.
-      -s -symlinks
-        follow symlinked directories
-
-      -y -yes
-        not ask user, just think as yes
-
-      -C -workpath
-	output screenshot pics will be store here
-
-      -m method
-        compare method (length, auto, or manual)
-          lenght: lowest level compare, just compare the video length
-          auto: compare some screenshots in video automatically
-          manual: compare some screenshots and display to user
-
-      -v --verbose
-	display more debug infomations
-
-      -h --help
-	displays help
-";
-
-  print $str;
 }
