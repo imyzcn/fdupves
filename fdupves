@@ -60,8 +60,8 @@ if ($config->{workpath} =~ /^\~/) {
 if (open FH, '<', $CacheFile) {
   while (<FH>) {
     chomp;
-    my ($file, $timer, $value) = split /\|\|\|\|/, $_;
-    $pre_cache{$file}->{hash}->{$timer} = $value;
+    my ($file, $timer, $hasha, $hashb) = split /\|\|\|\|/, $_;
+    $pre_cache{$file}->{hash}->{$timer} = pack 'VV', $hasha, $hashb;
   }
   close FH;
 }
@@ -80,7 +80,8 @@ END {
     open FH, '>', $CacheFile;
     for my $file (keys %cache) {
       while (my ($timer, $hash) = each %{$cache{$file}->{hash}}) {
-	my $str = join ('||||', $file, $timer, $hash) . "\n";
+	my ($hasha, $hashb) = unpack 'V2', $hash;
+	my $str = join ('||||', $file, $timer, $hasha, $hashb) . "\n";
 	print FH $str;
       }
     }
@@ -931,8 +932,8 @@ sub get_image_hash {
   for (0 .. 31) {
     $binl |= (1 << $_) if ($phrase[$_] >= $avg);
   }
-  for (32 .. @phrase - 1) {
-    $binh |= (1 << $_) if ($phrase[$_] >= $avg);
+  for (0 .. 31) {
+    $binh |= (1 << ($_)) if ($phrase[$_ + 32] >= $avg);
   }
 
   return pack 'VV', $binh, $binl;
