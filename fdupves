@@ -927,12 +927,15 @@ sub get_image_hash {
   }
   my $avg = $sum / @phrase;
 
-  my $bin = 0;
-  for (0 .. @phrase - 1) {
-    $bin |= (1 << $_) if ($phrase[$_] >= $avg);
+  my ($binl, $binh) = 0;
+  for (0 .. 31) {
+    $binl |= (1 << $_) if ($phrase[$_] >= $avg);
+  }
+  for (32 .. @phrase - 1) {
+    $binh |= (1 << $_) if ($phrase[$_] >= $avg);
   }
 
-  return $bin;
+  return pack 'VV', $binh, $binl;
 }
 
 sub imghash_cmp {
@@ -940,8 +943,16 @@ sub imghash_cmp {
 
   return $config->{hash_size}->[0] * $config->{hash_size}->[1] unless ($bina && $binb);
 
+  my ($binah, $binal) = unpack 'V2', $bina;
+  my ($binbh, $binbl) = unpack 'V2', $binb;
+
   my $sum = 0;
-  my $odd = int ((int $bina) ^ (int $binb));
+  my $odd = int ((int $binah) ^ (int $binbh));
+  while ($odd) {
+    $sum ++ if ($odd & 1);
+    $odd = $odd >> 1;
+  }
+  $odd = int ((int $binal) ^ (int $binbl));
   while ($odd) {
     $sum ++ if ($odd & 1);
     $odd = $odd >> 1;
