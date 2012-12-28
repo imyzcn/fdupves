@@ -135,6 +135,8 @@ sub load_default_conf {
 
 	     compare_count => 4,
 
+	     hash_distance => 2,
+
 	     hash_size => [
 			   8,
 			   8,
@@ -656,7 +658,7 @@ sub process_video {
   for my $sort_files (@$sort_group_files) {
     for my $file (@{$sort_files}) {
       # break when hash distance >5
-      last if ($cache{$file}->{min_hash} > 5);
+      last if ($cache{$file}->{min_hash} > $config->{hash_distance});
 
       my $nextfile = $cache{$file}->{min_file};
 
@@ -675,7 +677,7 @@ sub process_video {
 
 	my $hasha = get_filetime_hash ($file, $ss);
 	my $hashb = get_filetime_hash ($nextfile, $ss);
-	if (imghash_cmp ($hasha, $hashb) > 5) {
+	if (imghash_cmp ($hasha, $hashb) > $config->{hash_distance}) {
 	  $equ = 0;
 	  last;
 	}
@@ -727,7 +729,7 @@ sub process_image {
 
   my @similar_files = grep {
     defined $image_cache{$_}->{min_hash}
-      && $image_cache{$_}->{min_hash} < 5
+      && $image_cache{$_}->{min_hash} < $config->{hash_distance}
     } @files;
 
   for my $file (@similar_files) {
