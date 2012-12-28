@@ -19,7 +19,10 @@ use User;
 use Wx qw(:everything);
 use Wx::Event qw/EVT_CLOSE
 		 EVT_TOOL
+		 EVT_BUTTON
 		 EVT_LIST_ITEM_ACTIVATED
+		 EVT_TREE_SEL_CHANGED
+		 EVT_TREE_ITEM_ACTIVATED
 		 EVT_CHECKLISTBOX/;
 
 # GLobal configurations
@@ -413,6 +416,8 @@ sub ui_childarea_new {
 
   $self->{res_tree} = Wx::TreeCtrl->new ($resnb);
   $resnb->AddPage ($self->{res_tree}, 'Same Files', 0);
+  EVT_TREE_SEL_CHANGED ($self, $self->{res_tree}, \&restree_onselchanged);
+  EVT_TREE_ITEM_ACTIVATED ($self, $self->{res_tree}, \&restree_onactivated);
 
   $split1->SplitVertically ($split2, $resnb, 300);
   $split2->SplitHorizontally ($findnb, $text, 400);
@@ -427,6 +432,31 @@ sub proctype_oncheck {
 sub dirlist_onactivated {
   my ($self, $ev) = @_;
   $self->DeleteItem ($ev->GetIndex);
+}
+
+sub restree_onselchanged {
+  my ($self, $ev) = @_;
+  Wx::LogMessage ("$self, $ev");
+  $self->{res_tree}->{seledid} = $ev->GetOldItem;
+}
+
+sub restree_onactivated {
+  my ($self, $ev) = @_;
+  Wx::LogMessage ("$self, $ev");
+  my $id = $ev->GetItem;
+
+  unless (exists $self->{res_tree}->{seledid}) {
+    $self->{res_tree}->{seledid} = $id;
+  } else {
+    my $lastid = $self->{res_tree}->{seledid};
+    if ($id != $lastid) {
+      display_diff ($self,
+		    $self->{res_tree}->GetItemText ($lastid),
+		    $self->{res_tree}->GetItemText ($id)
+		   );
+      delete $self->{res_tree}->{seledid};
+    }
+  }
 }
 
 sub ui_statusbar_new {
@@ -715,12 +745,10 @@ sub process_image {
   \@same_images;
 }
 
-sub user_confirm {
-  my ($self, $file, $nextfile, $inputs) = @_;
+sub display_diff {
+  my ($self, $afile, $bfile) = @_;
 
-  my $lines = int ((@$inputs + 1) / 2);
-  my $w = $config->{thumb_size}->[0];
-  my $h = $config->{thumb_size}->[1];
+  return unless ($afile && $bfile);
 
   my $dia = Wx::Dialog->new ($self,
 			     wxID_ANY,
@@ -728,65 +756,145 @@ sub user_confirm {
 			    );
   my $sizer = Wx::BoxSizer->new (wxVERTICAL);
 
-  my $bsizer = $dia->CreateButtonSizer (wxYES | wxCANCEL);
-  $sizer->Add ($bsizer, 0, wxALIGN_CENTER_HORIZONTAL);
-
+  # File infomations
   my $tsizer = Wx::BoxSizer->new (wxHORIZONTAL);
-  my $fileinfo = Wx::StaticText->new ($dia,
-				      wxID_ANY,
-				      file_info_string ($file),
-				     );
-  $tsizer->Add ($fileinfo, 1, wxEXPAND|wxALL, 0);
-  my $nextfileinfo = Wx::StaticText->new ($dia,
-					  wxID_ANY,
-					  file_info_string ($nextfile),
-					 );
-  $tsizer->Add ($nextfileinfo, 1, wxEXPAND|wxALL, 0);
   $sizer->Add ($tsizer, 0, wxEXPAND|wxALL, 4);
 
-  my $scrwin = Wx::ScrolledWindow->new
-    ($dia, wxID_ANY, wxDefaultPosition, [ $w << 1, $h ]);
+  # File Images
+  $dia->{gsizer} = Wx::BoxSizer->new (wxHORIZONTAL);
+  $sizer->Add ($dia->{gsizer});
 
-  my $gsizer = Wx::FlexGridSizer->new ($lines, 2);
+  # Addtional control button
+  my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
+  $sizer->Add ($hsizer);
 
-  for my $id (0 .. $lines - 1) {
-    my $imgfile = $inputs->[$id * 2];
-    my $imgpre = Wx::Image->new ($imgfile, wxBITMAP_TYPE_JPEG);
-    $imgpre->Rescale ($w, $h);
-    my $img = Wx::Bitmap->new ($imgpre);
-    my $bitmap = Wx::StaticBitmap->new ($scrwin,
+  # Dialog buttons. Cancel!!!
+  my $bsizer = $dia->CreateButtonSizer (wxCANCEL);
+  $sizer->Add ($bsizer, 1, wxALIGN_CENTER_HORIZONTAL);
+
+  if (is_video ($afile)) {
+    # show depends on less length file
+    my ($file, $nextfile) = ($afile, $bfile);
+    if ($cache{$nextfile}->{info}->{length} < $cache{$file}->{info}->{length}) {
+      $file = $bfile;
+      $nextfile = $afile;
+    }
+    $dia->{file} = $file;
+    $dia->{nextfile} = $nextfile;
+
+    my $fileinfo = Wx::StaticText->new ($dia,
 					wxID_ANY,
-					$img,
+					video_info_string ($file),
 				       );
-    $gsizer->Add ($bitmap, 0, wxGROW|wxALL, 0);
-
-    my $nextimgfile = $inputs->[$id * 2 + 1];
-    my $nextimgpre = Wx::Image->new ($nextimgfile, wxBITMAP_TYPE_JPEG);
-    $nextimgpre->Rescale ($w, $h);
-    my $nextimg = Wx::Bitmap->new ($nextimgpre);
-    my $nextbitmap = Wx::StaticBitmap->new ($scrwin,
+    $tsizer->Add ($fileinfo, 1, wxEXPAND|wxALL, 0);
+    my $nextfileinfo = Wx::StaticText->new ($dia,
 					    wxID_ANY,
-					    $nextimg,
+					    video_info_string ($nextfile),
 					   );
-    $gsizer->Add ($nextbitmap, 0, wxGROW|wxALL, 0);
+    $tsizer->Add ($nextfileinfo, 1, wxEXPAND|wxALL, 0);
+
+    my @timers = sort { $a <=> $b } keys %{$cache{$file}->{screenshot}};
+    $dia->{timers} = \@timers;
+    $dia->{timerid} = 0;
+    dia_adddiffimg ($dia);
+
+    $dia->{prev} = Wx::Button->new ($dia, wxID_ANY, 'Previous');
+    $dia->{prev}->Enable (0);
+    $hsizer->Add ($dia->{prev});
+    $dia->{next} = Wx::Button->new ($dia, wxID_ANY, 'Next');
+    $dia->{next}->Enable (1);
+    $hsizer->Add ($dia->{next});
+    EVT_BUTTON ($dia, $dia->{prev}, \&diff_onprev);
+    EVT_BUTTON ($dia, $dia->{next}, \&diff_onnext);
+  } else {
+    my $fileinfo = Wx::StaticText->new ($dia,
+					wxID_ANY,
+					image_info_string ($afile),
+				       );
+    $tsizer->Add ($fileinfo, 1, wxEXPAND|wxALL, 0);
+    my $nextfileinfo = Wx::StaticText->new ($dia,
+					    wxID_ANY,
+					    image_info_string ($bfile),
+					   );
+    $tsizer->Add ($nextfileinfo, 1, wxEXPAND|wxALL, 0);
+
+    dia_addimg ($dia, $afile, $bfile);
   }
-
-  $scrwin->SetSizer ($gsizer);
-  $gsizer->Fit ($scrwin);
-  $gsizer->SetSizeHints ($scrwin);
-
-  $sizer->Add ($scrwin, 1, wxEXPAND|wxALL, 2);
 
   $dia->SetSizer ($sizer);
   $sizer->Fit ($dia);
   $sizer->SetSizeHints ($dia);
 
-  my $yes = $dia->ShowModal;
-  if ($yes == wxID_YES) {
-    return 1;
-  } else {
-    return 0;
+  $dia->ShowModal;
+}
+
+sub diff_onprev {
+  my ($dia, $ev) = @_;
+  $dia->{timerid} --;
+
+  $dia->{gsizer}->Clear (1);
+  dia_adddiffimg ($dia);
+
+  if ($dia->{timerid} == 0) {
+    $dia->{prev}->Enable (0);
   }
+  $dia->{next}->Enable (1);
+}
+
+sub diff_onnext {
+  my ($dia, $ev) = @_;
+  $dia->{timerid} ++;
+
+  $dia->{gsizer}->Clear (1);
+  dia_adddiffimg ($dia);
+
+  if ($dia->{timerid} == (scalar @{$dia->{timers}} - 1)) {
+    $dia->{next}->Enable (0);
+  }
+  $dia->{prev}->Enable (1);
+}
+
+sub dia_addimg {
+  my ($dia, $imgfile, $nextimgfile) = @_;
+
+  next unless (-r $imgfile && -r $nextimgfile);
+
+  my $w = $config->{thumb_size}->[0];
+  my $h = $config->{thumb_size}->[1];
+
+  my $imgpre = Wx::Image->new
+    ($imgfile, wxBITMAP_TYPE_ANY);
+  $imgpre->Rescale ($w, $h);
+  my $img = Wx::Bitmap->new ($imgpre);
+  my $bitmap = Wx::StaticBitmap->new ($dia,
+				      wxID_ANY,
+				      $img,
+				     );
+  $dia->{gsizer}->Add ($bitmap, 1, wxEXPAND);
+
+  my $nextimgpre = Wx::Image->new
+    ($nextimgfile, wxBITMAP_TYPE_ANY);
+  $nextimgpre->Rescale ($w, $h);
+  my $nextimg = Wx::Bitmap->new ($nextimgpre);
+  my $nextbitmap = Wx::StaticBitmap->new ($dia,
+					  wxID_ANY,
+					  $nextimg,
+					 );
+  $dia->{gsizer}->Add ($nextbitmap, 1, wxEXPAND);
+
+  $dia->{gsizer}->Layout;
+}
+
+sub dia_adddiffimg {
+  my ($dia) = @_;
+  my $timer = $dia->{timers}->[$dia->{timerid}];
+  my ($imgfile, $nextimgfile) =
+    (
+     $cache{$dia->{file}}->{screenshot}->{$timer},
+     $cache{$dia->{nextfile}}->{screenshot}->{$timer}
+    );
+
+  dia_addimg ($dia, $imgfile, $nextimgfile);
 }
 
 sub sort_img_by_similar {
@@ -892,13 +1000,15 @@ sub get_screenshot_by_mplayer {
 sub get_filetime_hash {
   my ($file, $timer) = @_;
 
+  my $imgfile = catfile ($cache{$file}->{cache_dir}, $timer . '.jpg');
+  $cache{$file}->{screenshot}->{$timer} = $imgfile;
+
   if (exists $pre_cache{$file}->{hash}->{$timer}
       && $pre_cache{$file}->{hash}->{$timer}) {
     $cache{$file}->{hash}->{$timer} = $pre_cache{$file}->{hash}->{$timer};
     return $cache{$file}->{hash}->{$timer};
   }
 
-  my $imgfile = catfile ($cache{$file}->{cache_dir}, $timer . '.jpg');
   get_screenshot ($file, $timer, $imgfile) unless (-r $imgfile);
 
   return unless (-r $imgfile);
@@ -966,7 +1076,7 @@ sub imghash_cmp {
   $sum;
 }
 
-sub file_info_string {
+sub video_info_string {
   my $file = shift;
 
   return sprintf
@@ -976,6 +1086,15 @@ sub file_info_string {
 	  $cache{$file}->{info}->{length},
 	    $cache{$file}->{info}->{width},
 	      $cache{$file}->{info}->{height};
+}
+
+sub image_info_string {
+  my $file = shift;
+
+  return sprintf
+    "File:%s\nPath:%s\n",
+      basename ($file),
+	dirname ($file);
 }
 
 sub file_parse {
