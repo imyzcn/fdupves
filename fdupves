@@ -1060,7 +1060,7 @@ sub get_image_hash {
   }
   my $avg = $sum / @phrase;
 
-  my ($binl, $binh) = 0;
+  my ($binl, $binh) = (0, 0);
   for (0 .. 31) {
     $binl |= (1 << $_) if ($phrase[$_] >= $avg);
   }
