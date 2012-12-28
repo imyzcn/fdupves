@@ -5,9 +5,7 @@ use warnings;
 use strict;
 
 use Config::Tiny;
-#use utf8;
 use Data::Dumper;
-use Getopt::Long;
 use File::Basename;
 use File::Copy;
 use File::Spec::Functions;
@@ -24,6 +22,8 @@ use Wx::Event qw/EVT_CLOSE
 		 EVT_TREE_SEL_CHANGED
 		 EVT_TREE_ITEM_ACTIVATED
 		 EVT_CHECKLISTBOX/;
+use Wx::Locale;
+use Encode;
 
 # GLobal configurations
 my $config;
@@ -326,6 +326,8 @@ sub gui_init {
 
   Wx::InitAllImageHandlers;	#init img handlers
 
+  $frame->{encoding} = Wx::Locale::GetSystemEncodingName;
+
   ui_toolbar_new ($frame);
   ui_childarea_new ($frame);
   ui_statusbar_new ($frame);
@@ -450,9 +452,11 @@ sub restree_onactivated {
   } else {
     my $lastid = $self->{res_tree}->{seledid};
     if ($id != $lastid) {
+      my $afile = $self->{res_tree}->GetItemText ($lastid);
+      my $bfile = $self->{res_tree}->GetItemText ($id);
       display_diff ($self,
-		    $self->{res_tree}->GetItemText ($lastid),
-		    $self->{res_tree}->GetItemText ($id)
+		    encode ($self->{encoding}, $afile),
+		    encode ($self->{encoding}, $bfile),
 		   );
       delete $self->{res_tree}->{seledid};
     }
@@ -492,7 +496,9 @@ sub but_find_clicked {
 
   my @files;
   for (0 .. $self->{dir_list}->GetItemCount - 1) {
-    push @files, $self->{dir_list}->GetItemText ($_);
+    my $file = $self->{dir_list}->GetItemText ($_);
+    my $localname = encode ($self->{encoding}, $file);
+    push @files, $localname;
   }
 
   unless (@files) {
