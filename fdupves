@@ -17,13 +17,16 @@ use Digest::SHA qw/sha1_hex/;
 
 use User;
 use Wx qw(:everything);
-use Wx::Event qw/EVT_CLOSE EVT_TOOL EVT_CHECKLISTBOX/;
+use Wx::Event qw/EVT_CLOSE
+		 EVT_TOOL
+		 EVT_LIST_ITEM_ACTIVATED
+		 EVT_CHECKLISTBOX/;
 
 # GLobal configurations
 my $config;
 
 # Process data
-my @dir;
+my @cmd_files;
 my %pre_cache;
 my %cache;
 my %image_cache;
@@ -47,7 +50,7 @@ my $CacheFile = catfile ($UserHome, '.fdupves.cache');
 for (@ARGV) {
   $_ =~ s/^\~/$UserHome/;
   $_ = File::Spec->rel2abs ($_) unless (file_name_is_absolute ($_));
-  push @dir, $_;
+  push @cmd_files, $_;
 }
 
 if ($config->{workpath} =~ /^\~/) {
@@ -91,9 +94,7 @@ END {
 
 sub load_default_conf {
   $config = {
-	     symlinks => 0,
 	     workpath => "~/.fdupves.d/cache",
-	     yes => 0,
 	     verbose => 0,
 	     player => 'mplayer',
 
@@ -207,11 +208,9 @@ sub save_file_conf {
 }
 
 sub process_dir {
-  my $self = shift;
+  my ($self, $filesp) = @_;
 
-  for (@dir) {
-    next if (-l $_ && (not $config->{symlinks}));
-
+  for (@{$filesp}) {
     if (-d $_) {
       walk_dir (\&file_parse, $_);
     } elsif (-f $_) {
@@ -260,8 +259,6 @@ sub walk_dir {
 	next;
       }
       my $file = catfile ($dir, $_);
-
-      next if (-l $file && (not $config->{symlinks}));
 
       if (-d $file) {
 	push (@dirs, $file);
@@ -384,8 +381,7 @@ sub ui_childarea_new {
   $self->{dir_list} = Wx::ListView->new ($panel);
   $self->{dir_list}->InsertColumn (0, "", wxLIST_FORMAT_LEFT, 300);
   $sizer->Add ($self->{dir_list}, 1, wxEXPAND|wxALL, 0);
-
-  #  EVT_LIST_KEY_DOWN ($self->{dir_list}, $self->{dir_list}, \&dirlist_onkeydown);
+  EVT_LIST_ITEM_ACTIVATED ($self->{dir_list}, $self->{dir_list}, \&dirlist_onactivated);
 
   my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
   $self->{proc_type} = Wx::CheckListBox->new
@@ -405,8 +401,8 @@ sub ui_childarea_new {
   EVT_CLOSE ($self, \&gui_onclose);
 
   # load the command line input directoies
-  for (@dir) {
-    $self->{dir_list}->InsertStringItem (@dir - 1, $_);
+  for (@cmd_files) {
+    $self->{dir_list}->InsertStringItem (@cmd_files - 1, $_);
   }
 
   $panel->SetSizer ($sizer);
@@ -428,9 +424,9 @@ sub proctype_oncheck {
   $config->{proc_video} = $self->IsChecked (1);
 }
 
-sub dirlist_onkeydown {
+sub dirlist_onactivated {
   my ($self, $ev) = @_;
-  Wx::LogMessage ("$self: $ev");
+  $self->DeleteItem ($ev->GetIndex);
 }
 
 sub ui_statusbar_new {
@@ -447,23 +443,13 @@ sub but_add_clicked {
 				wxDD_DIR_MUST_EXIST);
   my $res = $dia->ShowModal;
   if ($res == wxID_OK) {
-    push @dir, $dia->GetPath;
-    $self->{dir_list}->InsertStringItem (@dir - 1, $dia->GetPath);
+    $self->{dir_list}->InsertStringItem ($self->{dir_list}->GetItemCount, $dia->GetPath);
   }
 }
 
 sub but_find_clicked {
   my $self = shift;
 
-  unless (@dir) {
-    my $mes = Wx::MessageDialog->new ($self,
-				      "Please 'Add' source directory first.",
-				      "Warn",
-				      wxOK | wxICON_HAND | wxSTAY_ON_TOP
-				     );
-    $mes->ShowModal;
-    return;
-  }
   unless ($config->{proc_image} || $config->{proc_video}) {
     my $mes = Wx::MessageDialog->new ($self,
 				      "Please check process image/video.",
@@ -474,7 +460,26 @@ sub but_find_clicked {
     return;
   }
 
-  my $samefilep = process_dir ($self);
+  my @files;
+  for (0 .. $self->{dir_list}->GetItemCount - 1) {
+    push @files, $self->{dir_list}->GetItemText ($_);
+  }
+
+  unless (@files) {
+    my $mes = Wx::MessageDialog->new ($self,
+				      "Please 'Add' source directory first.",
+				      "Warn",
+				      wxOK | wxICON_HAND | wxSTAY_ON_TOP
+				     );
+    $mes->ShowModal;
+    return;
+  }
+
+  # Clear the find cache
+  undef %cache;
+  undef %image_cache;
+
+  my $samefilep = process_dir ($self, \@files);
   return unless ($samefilep);
 
   Wx::LogMessage "Totally find %d groups of the same files", scalar @{$samefilep};
