@@ -894,6 +894,17 @@ sub dia_adddiffimg {
      $cache{$dia->{nextfile}}->{screenshot}->{$timer}
     );
 
+  unless ($nextimgfile) {
+    $nextimgfile = catfile ($cache{$dia->{nextfile}}->{cache_dir}, $timer . '.jpg');
+    $cache{$dia->{nextfile}}->{screenshot}->{$timer} = $nextimgfile;
+  }
+  unless (-r $imgfile) {
+    get_screenshot ($dia->{file}, $timer, $imgfile);
+  }
+  unless (-r $nextimgfile) {
+    get_screenshot ($dia->{nextfile}, $timer, $nextimgfile);
+  }
+
   dia_addimg ($dia, $imgfile, $nextimgfile);
 }
 
