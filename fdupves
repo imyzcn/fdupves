@@ -97,7 +97,7 @@ END {
 
 sub load_default_conf {
   $config = {
-	     workpath => "~/.fdupves.d/cache",
+	     workpath => "/tmp/fdupves.cache",
 	     verbose => 0,
 	     player => 'mplayer',
 
@@ -555,26 +555,6 @@ sub but_pref_clicked {
     $vsizer->Add ($hsizer, 0, wxEXPAND|wxALL, 5);
   }
 
-  # Work path
-  {
-    my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
-    my $label = Wx::StaticText->new
-      ($dia, wxID_ANY,
-       "Work Path",
-       wxDefaultPosition, [ 100, 20 ],
-      );
-    $hsizer->Add ($label, 0, wxALIGN_CENTER_VERTICAL);
-    $dia->{workpath_input} = Wx::DirPickerCtrl->new
-      ($dia, wxID_ANY,
-       "", "select your working directory",
-       wxDefaultPosition, wxDefaultSize,
-       wxDIRP_USE_TEXTCTRL | wxDIRP_DIR_MUST_EXIST,
-      );
-    $dia->{workpath_input}->SetPath ($config->{workpath});
-    $hsizer->Add ($dia->{workpath_input}, 1, wxEXPAND);
-    $vsizer->Add ($hsizer, 0, wxEXPAND|wxALL, 5);
-  }
-
   # Image suffix
   {
     my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
@@ -618,8 +598,8 @@ sub but_pref_clicked {
     my $hsizer = Wx::BoxSizer->new (wxHORIZONTAL);
     my $label = Wx::StaticText->new
       ($dia, wxID_ANY,
-       "Work Path",
-       wxDefaultPosition, [ 100, 20 ],
+       "Video Length Matrix",
+       wxDefaultPosition, [ 150, 20 ],
       );
     $hsizer->Add ($label, 0, wxALIGN_CENTER_VERTICAL);
     my @str;
@@ -645,8 +625,6 @@ sub but_pref_clicked {
   if ($res == wxID_OK) {
     my $player = $dia->{player_input}->GetPath;
     $config->{player} = $player if (-f $player);
-    my $path = $dia->{workpath_input}->GetPath;
-    $config->{workpath} = $path if (-d $path);
   }
 }
 
