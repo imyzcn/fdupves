@@ -97,7 +97,7 @@ END {
 
 sub load_default_conf {
   $config = {
-	     workpath => "/tmp/fdupves.cache",
+	     workpath => "~/.cache/fdupves",
 	     verbose => 0,
 	     player => 'mplayer',
 
