@@ -30,9 +30,7 @@ my $config;
 
 # Process data
 my @cmd_files;
-my %pre_cache;
-my %cache;
-my %image_cache;
+my %cache_hash;
 
 # Script Starts here
 my $OsIsWin = 0;
@@ -67,7 +65,8 @@ if (open FH, '<', $CacheFile) {
   while (<FH>) {
     chomp;
     my ($file, $timer, $hasha, $hashb) = split /\|\|\|\|/, $_;
-    $pre_cache{$file}->{hash}->{$timer} = pack 'VV', $hasha, $hashb;
+    next unless (-e $file);
+    $cache_hash{$file}->{hash}->{$timer} = pack 'VV', $hasha, $hashb;
   }
   close FH;
 }
@@ -84,8 +83,8 @@ END {
   # Save img hash and exit
   if ($CacheFile) {
     open FH, '>', $CacheFile;
-    for my $file (keys %cache) {
-      while (my ($timer, $hash) = each %{$cache{$file}->{hash}}) {
+    for my $file (keys %cache_hash) {
+      while (my ($timer, $hash) = each %{$cache_hash{$file}->{hash}}) {
 	my ($hasha, $hashb) = unpack 'V2', $hash;
 	my $str = join ('||||', $file, $timer, $hasha, $hashb) . "\n";
 	print FH $str;
@@ -217,33 +216,35 @@ sub process_dir {
 
   for (@{$filesp}) {
     if (-d $_) {
-      walk_dir (\&file_parse, $_);
+      walk_dir ($self, \&file_parse, $_);
     } elsif (-f $_) {
-      file_parse ($_);
+      file_parse ($self, $_);
     }
   }
 
   my @same_files;
 
   if ($config->{proc_video}) {
-    if (keys %cache < 2) {
-      Wx::LogWarning "no enough video files to process";
-    } else {
+    if (exists $self->{videos}
+	&& keys %{$self->{videos}} > 1) {
       my $samevideop = process_video ($self);
       if (ref $samevideop eq 'ARRAY') {
 	push @same_files, @{$samevideop};
       }
+    } else {
+      Wx::LogWarning "no enough video files to process";
     }
   }
 
   if ($config->{proc_image}) {
-    if (keys %image_cache < 2) {
-      Wx::LogWarning "no enough image files to process";
-    } else {
+    if (exists $self->{images}
+	&& keys %{$self->{images}} > 1) {
       my $sameimagep = process_image ($self);
       if (ref $sameimagep eq 'ARRAY') {
 	push @same_files, @{$sameimagep};
       }
+    } else {
+      Wx::LogWarning "no enough image files to process";
     }
   }
 
@@ -251,7 +252,7 @@ sub process_dir {
 }
 
 sub walk_dir {
-  my ($callback, @dirs) = @_;
+  my ($self, $callback, @dirs) = @_;
 
   while (my $dir = pop @dirs) {
     local *DH;
@@ -268,7 +269,7 @@ sub walk_dir {
       if (-d $file) {
 	push (@dirs, $file);
       } elsif (-f $file) {
-	&$callback ($file);
+	&$callback ($self, $file);
       }
     }
 
@@ -440,13 +441,11 @@ sub dirlist_onactivated {
 
 sub restree_onselchanged {
   my ($self, $ev) = @_;
-  Wx::LogMessage ("$self, $ev");
   $self->{res_tree}->{seledid} = $ev->GetOldItem;
 }
 
 sub restree_onactivated {
   my ($self, $ev) = @_;
-  Wx::LogMessage ("$self, $ev");
   my $id = $ev->GetItem;
 
   unless (exists $self->{res_tree}->{seledid}) {
@@ -513,9 +512,9 @@ sub but_find_clicked {
     return;
   }
 
-  # Clear the find cache
-  undef %cache;
-  undef %image_cache;
+  # Clear the find tempory data
+  delete $self->{videos};
+  delete $self->{images};
 
   my $samefilep = process_dir ($self, \@files);
   return unless ($samefilep);
@@ -629,32 +628,33 @@ sub but_pref_clicked {
 }
 
 sub process_video {
-  my $self = shift;
-  my $sort_group_files = &sort_img_by_similar;
+  my ($self) = @_;
+  my $videos = $self->{videos};
+  my $sort_group_files = sort_video_by_similar ($videos);
   my @same_videos;
 
   for my $sort_files (@$sort_group_files) {
     for my $file (@{$sort_files}) {
       # break when hash distance >5
-      last if ($cache{$file}->{min_hash} > $config->{hash_distance});
+      last if ($videos->{$file}->{min_hash} > $config->{hash_distance});
 
-      my $nextfile = $cache{$file}->{min_file};
+      my $nextfile = $videos->{$file}->{min_file};
 
-      my $shorter = $cache{$file}->{info}->{length};
-      $shorter = $cache{$nextfile}->{info}->{length} if ($cache{$nextfile}->{info}->{length}
-							 < $shorter);
+      my $shorter = $videos->{$file}->{info}->{length};
+      $shorter = $videos->{$nextfile}->{info}->{length} if ($videos->{$nextfile}->{info}->{length}
+							    < $shorter);
       my $interval = $shorter / ($config->{compare_count});
 
       my $equ = 1;
       for (1 .. $config->{compare_count} - 1) {
-	my $ss = $cache{$file}->{min_chunk} + $_ * $interval;
+	my $ss = $videos->{$file}->{min_chunk} + $_ * $interval;
 	$ss =
-	  $cache{$file}->{info}->{length}
-	    - $cache{$file}->{min_chunk}
-	      - $_ * $interval if ($cache{$file}->{min_type} == 1);
+	  $videos->{$file}->{info}->{length}
+	    - $videos->{$file}->{min_chunk}
+	      - $_ * $interval if ($videos->{$file}->{min_type} == 1);
 
-	my $hasha = get_filetime_hash ($file, $ss);
-	my $hashb = get_filetime_hash ($nextfile, $ss);
+	my $hasha = get_filetime_hash ($videos, $file, $ss);
+	my $hashb = get_filetime_hash ($videos, $nextfile, $ss);
 	if (imghash_cmp ($hasha, $hashb) > $config->{hash_distance}) {
 	  $equ = 0;
 	  last;
@@ -684,34 +684,36 @@ sub process_video {
 }
 
 sub process_image {
-  my @files = keys %image_cache;
+  my ($self) = @_;
+  my $images = $self->{images};
+  my @files = keys %{$images};
   my @same_images;
 
   for my $id ( 0 .. @files - 2) {
     my $file = $files[$id];
-    my $hash = $image_cache{$file}->{hash};
+    my $hash = $images->{$file}->{hash};
     my $min = $config->{hash_size}->[0] * $config->{hash_size}->[1];
-    $min = $image_cache{$file}->{min_hash} if ($image_cache{$file}->{min_file});
+    $min = $images->{$file}->{min_hash} if ($images->{$file}->{min_file});
 
     for my $nextid ($id + 1 .. @files - 1) {
       my $nextfile = $files[$nextid];
-      my $nexthash = $image_cache{$nextfile}->{hash};
+      my $nexthash = $images->{$nextfile}->{hash};
       my $cmp = imghash_cmp ($hash, $nexthash);
       if ($cmp < $min) {
-	$image_cache{$file}->{min_file} = $nextfile;
-	$image_cache{$file}->{min_hash} = $cmp;
+	$images->{$file}->{min_file} = $nextfile;
+	$images->{$file}->{min_hash} = $cmp;
 	$min = $cmp;
       }
     }
   }
 
   my @similar_files = grep {
-    defined $image_cache{$_}->{min_hash}
-      && $image_cache{$_}->{min_hash} < $config->{hash_distance}
+    defined $images->{$_}->{min_hash}
+      && $images->{$_}->{min_hash} < $config->{hash_distance}
     } @files;
 
   for my $file (@similar_files) {
-    my $nextfile = $image_cache{$file}->{min_file};
+    my $nextfile = $images->{$file}->{min_file};
     my $has_find = 0;
     for my $sfs (@same_images) {
       for my $curfile (@{$sfs}) {
@@ -722,7 +724,7 @@ sub process_image {
       }
     }
     unless ($has_find) {
-      my @sfs = ($file, $image_cache{$file}->{min_file});
+      my @sfs = ($file, $images->{$file}->{min_file});
       push @same_images, \@sfs;
     }
   }
@@ -761,7 +763,7 @@ sub display_diff {
   if (is_video ($afile)) {
     # show depends on less length file
     my ($file, $nextfile) = ($afile, $bfile);
-    if ($cache{$nextfile}->{info}->{length} < $cache{$file}->{info}->{length}) {
+    if ($self->{videos}->{$nextfile}->{info}->{length} < $self->{videos}->{$file}->{info}->{length}) {
       $file = $bfile;
       $nextfile = $afile;
     }
@@ -770,18 +772,19 @@ sub display_diff {
 
     my $fileinfo = Wx::StaticText->new ($dia,
 					wxID_ANY,
-					video_info_string ($file),
+					video_info_string ($self, $file),
 				       );
     $tsizer->Add ($fileinfo, 1, wxEXPAND|wxALL, 0);
     my $nextfileinfo = Wx::StaticText->new ($dia,
 					    wxID_ANY,
-					    video_info_string ($nextfile),
+					    video_info_string ($self, $nextfile),
 					   );
     $tsizer->Add ($nextfileinfo, 1, wxEXPAND|wxALL, 0);
 
-    my @timers = sort { $a <=> $b } keys %{$cache{$file}->{screenshot}};
+    my @timers = sort { $a <=> $b } keys %{$self->{videos}->{$file}->{screenshot}};
     $dia->{timers} = \@timers;
     $dia->{timerid} = 0;
+    $dia->{self} = $self;
     dia_adddiffimg ($dia);
 
     $dia->{prev} = Wx::Button->new ($dia, wxID_ANY, 'Previous');
@@ -873,16 +876,17 @@ sub dia_addimg {
 
 sub dia_adddiffimg {
   my ($dia) = @_;
+  my $self = $dia->{self};
   my $timer = $dia->{timers}->[$dia->{timerid}];
   my ($imgfile, $nextimgfile) =
     (
-     $cache{$dia->{file}}->{screenshot}->{$timer},
-     $cache{$dia->{nextfile}}->{screenshot}->{$timer}
+     $self->{videos}->{$dia->{file}}->{screenshot}->{$timer},
+     $self->{videos}->{$dia->{nextfile}}->{screenshot}->{$timer}
     );
 
   unless ($nextimgfile) {
-    $nextimgfile = catfile ($cache{$dia->{nextfile}}->{cache_dir}, $timer . '.jpg');
-    $cache{$dia->{nextfile}}->{screenshot}->{$timer} = $nextimgfile;
+    $nextimgfile = catfile ($self->{videos}->{$dia->{nextfile}}->{imgdir}, $timer . '.jpg');
+    $self->{videos}->{$dia->{nextfile}}->{screenshot}->{$timer} = $nextimgfile;
   }
   unless (-r $imgfile) {
     get_screenshot ($dia->{file}, $timer, $imgfile);
@@ -894,14 +898,15 @@ sub dia_adddiffimg {
   dia_addimg ($dia, $imgfile, $nextimgfile);
 }
 
-sub sort_img_by_similar {
+sub sort_video_by_similar {
+  my ($videos) = @_;
   my %compared_files;
   my @group_files;
   my @sort_group_files;
 
   for my $timer_id (0 .. @{$config->{video_timers}} - 1) {
-    my @grep_files = grep { $cache{$_}->{info}->{length} >= $config->{video_timers}->[$timer_id]->[0]
-			      && $cache{$_}->{info}->{length} < $config->{video_timers}->[$timer_id]->[1] } keys %cache;
+    my @grep_files = grep { $videos->{$_}->{info}->{length} >= $config->{video_timers}->[$timer_id]->[0]
+			      && $videos->{$_}->{info}->{length} < $config->{video_timers}->[$timer_id]->[1] } keys %{$videos};
     push @group_files, \@grep_files;
   }
 
@@ -914,37 +919,41 @@ sub sort_img_by_similar {
     my $hassame = 0;
     for my $id (0 .. @files - 2) {
       my $file = $files[$id];
-      my $beginhash = get_filetime_hash ($file, $chunk);
-      my $endhash = get_filetime_hash ($file, $cache{$file}->{info}->{length} - $chunk);
+      my $beginhash = get_filetime_hash ($videos, $file, $chunk);
+      my $endhash = get_filetime_hash ($videos, $file, $videos->{$file}->{info}->{length} - $chunk);
 
       my $min = $config->{hash_size}->[0] * $config->{hash_size}->[1];
-      $min = $cache{$file}->{min_hash} if ($cache{$file}->{min_file});
+      $min = $videos->{$file}->{min_hash} if ($videos->{$file}->{min_file});
 
       for my $nextid ($id + 1 .. @files - 1) {
 	my $nextfile = $files[$nextid];
 
-	my $compkey = sprintf ("%s:%s", $cache{$file}->{phrase}, $cache{$nextfile}->{phrase});
+	my $compkey = sprintf ("%s:%s",
+			       $videos->{$file}->{phrase},
+			       $videos->{$nextfile}->{phrase}
+			      );
 	next if (exists $compared_files{$compkey});
 	$compared_files{$compkey} = 1;
 
-	my $nextbeginhash = get_filetime_hash ($nextfile, $chunk);
-	my $nextendhash = get_filetime_hash ($nextfile, $cache{$nextfile}->{info}->{length} - $chunk);
+	my $nextbeginhash = get_filetime_hash ($videos, $nextfile, $chunk);
+	my $nextendhash = get_filetime_hash
+	  ($videos, $nextfile, $videos->{$nextfile}->{info}->{length} - $chunk);
 
 	my $begin = imghash_cmp ($beginhash, $nextbeginhash);
 	if ($begin < $min) {
-	  $cache{$file}->{min_file} = $nextfile;
-	  $cache{$file}->{min_hash} = $begin;
-	  $cache{$file}->{min_type} = 0;
-	  $cache{$file}->{min_chunk} = $chunk;
+	  $videos->{$file}->{min_file} = $nextfile;
+	  $videos->{$file}->{min_hash} = $begin;
+	  $videos->{$file}->{min_type} = 0;
+	  $videos->{$file}->{min_chunk} = $chunk;
 	  $min = $begin;
 	  $hassame = 1;
 	}
 	my $end = imghash_cmp ($endhash, $nextendhash);
 	if ($end < $min) {
-	  $cache{$file}->{min_file} = $nextfile;
-	  $cache{$file}->{min_hash} = $end;
-	  $cache{$file}->{min_type} = 1;
-	  $cache{$file}->{min_chunk} = $chunk;
+	  $videos->{$file}->{min_file} = $nextfile;
+	  $videos->{$file}->{min_hash} = $end;
+	  $videos->{$file}->{min_type} = 1;
+	  $videos->{$file}->{min_chunk} = $chunk;
 	  $min = $end;
 	  $hassame = 1;
 	}
@@ -953,9 +962,9 @@ sub sort_img_by_similar {
 
     next unless ($hassame);
 
-    my @has_files = grep { defined $cache{$_}->{min_hash} } @files;
+    my @has_files = grep { defined $videos->{$_}->{min_hash} } @files;
     my @sort_list = sort {
-      $cache{$a}->{min_hash} <=> $cache{$b}->{min_hash}
+      $videos->{$a}->{min_hash} <=> $videos->{$b}->{min_hash}
     } @has_files;
 
     push @sort_group_files, \@sort_list;
@@ -995,15 +1004,15 @@ sub get_screenshot_by_mplayer {
 }
 
 sub get_filetime_hash {
-  my ($file, $timer) = @_;
+  my ($videos, $file, $timer) = @_;
 
-  my $imgfile = catfile ($cache{$file}->{cache_dir}, $timer . '.jpg');
-  $cache{$file}->{screenshot}->{$timer} = $imgfile;
+  my $imgfile = catfile ($videos->{$file}->{imgdir}, $timer . '.jpg');
+  $videos->{$file}->{screenshot}->{$timer} = $imgfile;
 
-  if (exists $pre_cache{$file}->{hash}->{$timer}
-      && $pre_cache{$file}->{hash}->{$timer}) {
-    $cache{$file}->{hash}->{$timer} = $pre_cache{$file}->{hash}->{$timer};
-    return $cache{$file}->{hash}->{$timer};
+  if (exists $cache_hash{$file}->{hash}->{$timer}
+      && $cache_hash{$file}->{hash}->{$timer}) {
+    $videos->{$file}->{hash}->{$timer} = $cache_hash{$file}->{hash}->{$timer};
+    return $videos->{$file}->{hash}->{$timer};
   }
 
   get_screenshot ($file, $timer, $imgfile) unless (-r $imgfile);
@@ -1012,7 +1021,8 @@ sub get_filetime_hash {
 
   my $bin = get_image_hash ($imgfile);
 
-  $cache{$file}->{hash}->{$timer} = $bin;
+  $cache_hash{$file}->{hash}->{$timer} = $bin;
+  $videos->{$file}->{hash}->{$timer} = $bin;
 }
 
 sub get_image_hash {
@@ -1074,15 +1084,15 @@ sub imghash_cmp {
 }
 
 sub video_info_string {
-  my $file = shift;
+  my ($self, $file) = @_;
 
   return sprintf
     "File:%s\nFormat:%s\nLength:%s\nSize:%dx%d\n",
       basename ($file),
-	$cache{$file}->{info}->{format},
-	  $cache{$file}->{info}->{length},
-	    $cache{$file}->{info}->{width},
-	      $cache{$file}->{info}->{height};
+	$self->{videos}->{$file}->{info}->{format},
+	  $self->{videos}->{$file}->{info}->{length},
+	    $self->{videos}->{$file}->{info}->{width},
+	      $self->{videos}->{$file}->{info}->{height};
 }
 
 sub image_info_string {
@@ -1095,35 +1105,36 @@ sub image_info_string {
 }
 
 sub file_parse {
-  my $file = shift;
+  my ($self, $file) = @_;
 
   if ($config->{proc_video} && is_video ($file)) {
-    video_file_parse ($file);
+    video_file_parse ($self, $file);
   } elsif ($config->{proc_image} && is_image ($file)) {
-    image_file_parse ($file);
+    image_file_parse ($self, $file);
   }
 }
 
 sub video_file_parse {
-  my $file = shift;
+  my ($self, $file) = @_;
 
   my $info = get_info ($file);
   return unless ($info);
 
   my %nodes;
   $nodes{info} = $info;
-  $cache{$file} = \%nodes;
+  $self->{videos}->{$file} = \%nodes;
 
   my $phrase = substr sha1_hex ($file), 0, 16;
 
   $nodes{phrase} = $phrase;
-  $nodes{cache_dir} = catdir ($config->{workpath}, substr ($phrase, 0, 2), $phrase);
+  $nodes{imgdir} = catdir ($config->{workpath}, substr ($phrase, 0, 2), $phrase);
 }
 
 sub image_file_parse {
-  my $file = shift;
+  my ($self, $file) = @_;
 
-  $image_cache{$file}->{hash} = get_image_hash ($file) unless (exists $image_cache{$file});
+  $self->{images}->{$file}->{hash} = get_image_hash ($file)
+    unless (exists $self->{images}->{$file});
 }
 
 sub is_video {
