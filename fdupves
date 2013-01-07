@@ -884,7 +884,7 @@ sub diff_onnext {
 sub dia_addimg {
   my ( $dia, $imgfile, $nextimgfile ) = @_;
 
-  next unless ( -r $imgfile && -r $nextimgfile );
+  return unless ( -r $imgfile && -r $nextimgfile );
 
   my $w = $config->{thumb_size}->[0];
   my $h = $config->{thumb_size}->[1];
