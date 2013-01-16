@@ -1,0 +1,68 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR Free Software Foundation, Inc.
+# This file is distributed under the same license as the acnchess package.
+# Alf <naihe2010@126.com>, 2009.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: acnchess 0.0.1\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2013-01-16 12:26+0800\n"
+"PO-Revision-Date: 2011-09-05 11:12+0800\n"
+"Last-Translator: Alf <naihe2010@126.com>\n"
+"Language-Team: Alf <naihe2010@126.com>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: /home/pengda/personal/fdupves/src/gui.c:93
+msgid "Open"
+msgstr "打开"
+
+#: /home/pengda/personal/fdupves/src/gui.c:94
+#, fuzzy
+msgid "Open a article"
+msgstr "打开一篇文章"
+
+#: /home/pengda/personal/fdupves/src/gui.c:99
+msgid "Pub"
+msgstr "发布"
+
+#: /home/pengda/personal/fdupves/src/gui.c:100
+#, fuzzy
+msgid "Publish this article"
+msgstr "发布此文章"
+
+#: /home/pengda/personal/fdupves/src/gui.c:105
+msgid "Add"
+msgstr "填加"
+
+#: /home/pengda/personal/fdupves/src/gui.c:106
+msgid "Add a blog"
+msgstr "填加一个Blog"
+
+#: /home/pengda/personal/fdupves/src/gui.c:111
+msgid "Help"
+msgstr "帮助"
+
+#: /home/pengda/personal/fdupves/src/gui.c:112
+msgid "Help infomations"
+msgstr "帮助信息"
+
+#: /home/pengda/personal/fdupves/src/gui.c:151
+msgid "Choose Article"
+msgstr "选择文章"
+
+#: /home/pengda/personal/fdupves/src/gui.c:226
+#, fuzzy
+msgid "Add Blog"
+msgstr "填加一个Blog"
+
+#: /home/pengda/personal/fdupves/src/gui.c:238
+msgid "Display Name"
+msgstr "显示名"
+
+#: /home/pengda/personal/fdupves/src/gui.c:289
+msgid "Are you sure you want to quit amblog? "
+msgstr "你确定要退出amblog？"

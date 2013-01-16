@@ -1,0 +1,30 @@
+
+    fdupves Installation Instructions
+    ==================================
+
+    1) Get the tarball.
+    2) Unpack it: 
+    
+        tar xvzf fdupves-<version>.tar.bz2
+        
+    4) Change to the new directory:
+
+        cd fdupves-<version>
+
+    5) Make a build directory and confiugre it
+
+        mkdir build
+        cd build
+        ccmake ..
+
+    6) Build it
+
+        make
+
+    7) Install it:
+
+        make install
+
+    8) Run the application:
+
+        fdupves

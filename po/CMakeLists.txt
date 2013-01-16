@@ -1,0 +1,36 @@
+SET (POT_FILE fdupves.pot)
+SET (PO_FILES fdupves.po)
+SET (GMO_FILES zh_CN.gmo)
+SET (SRC_PO_FILES ${CMAKE_CURRENT_SOURCE_DIR}/fdupves.po)
+
+ADD_CUSTOM_COMMAND (COMMAND find ${CMAKE_SOURCE_DIR}/src -name "*.c"
+  -fprint cfiles
+  OUTPUT cfiles)
+ADD_CUSTOM_COMMAND (COMMAND xgettext
+  -f cfiles
+  -k_
+  -o ${POT_FILE}
+  OUTPUT ${POT_FILE}
+  DEPENDS cfiles)
+ADD_CUSTOM_TARGET (pofiles COMMAND ${GETTEXT_MSGMERGE_EXECUTABLE}
+  --force-po
+  ${SRC_PO_FILES} ${POT_FILE}
+  -o ${PO_FILES}
+  DEPENDS ${POT_FILE})
+
+ADD_CUSTOM_TARGET (gmofiles COMMAND ${GETTEXT_MSGFMT_EXECUTABLE}
+  -o ${GMO_FILES}
+  ${PO_FILES}
+  DEPENDS ${PO_FILES})
+
+ADD_CUSTOM_TARGET (translate
+  COMMAND mv
+  ${PO_FILES} ${GMO_FILES}
+  ${CMAKE_CURRENT_SOURCE_DIR})
+
+INSTALL (FILES ${GMO_FILES}
+  DESTINATION share/locale/zh_CN/LC_MESSAGES
+  RENAME fdupves.mo)
+
+ADD_DEPENDENCIES(gmofiles pofiles)
+ADD_DEPENDENCIES(translate gmofiles)
