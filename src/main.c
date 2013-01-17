@@ -45,22 +45,20 @@
 
 static fdini_t *init (int argc, char *argv[]);
 
-fdini_t *g_ini;
-
 int
 main (int argc, char *argv[])
 {
   gchar *prgdir, *localedir;
 
-  prgdir = am_install_path ();
+  prgdir = fd_install_path ();
   if (prgdir)
     {
-      localedir = g_build_filename (prgdir, AM_SYS_LOCALE_DIR, NULL);
+      localedir = g_build_filename (prgdir, FD_SYS_LOCALE_DIR, NULL);
       g_free (prgdir);
     }
   else
     {
-      localedir = g_strdup (AM_SYS_LOCALE_DIR);
+      localedir = g_strdup (FD_SYS_LOCALE_DIR);
     }
 
   if (localedir)
@@ -73,6 +71,7 @@ main (int argc, char *argv[])
     }
 
   //  curl_global_init (CURL_GLOBAL_ALL);
+  fdini_load (NULL);
 
   gtk_init (&argc, &argv);
 

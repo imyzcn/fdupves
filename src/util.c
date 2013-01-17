@@ -34,8 +34,8 @@
 #define PATH_MAX        4096
 #endif
 
-G_MODULE_EXPORT gchar *
-am_realpath (const gchar *path)
+gchar *
+fd_realpath (const gchar *path)
 {
   gchar *abpath;
   gchar opath[PATH_MAX];
@@ -76,8 +76,8 @@ am_realpath (const gchar *path)
   return abpath;
 }
 
-G_MODULE_EXPORT gchar *
-am_install_path ()
+gchar *
+fd_install_path ()
 {
   gchar *prgdir;
 
@@ -88,34 +88,4 @@ am_install_path ()
 #endif
 
   return prgdir;
-}
-
-GtkWidget *
-am_toolbar_icon_new (const gchar *name)
-{
-  gchar *prgdir, *icondir, *iconfile;
-  GtkWidget *img;
-
-  img = NULL;
-
-  prgdir = am_install_path ();
-  if (prgdir)
-    {
-      icondir = g_build_filename (prgdir, AM_SYS_ICON_DIR, NULL);
-      if (icondir)
-        {
-          iconfile = g_build_filename (icondir, name, NULL);
-          if (iconfile)
-            {
-              img = gtk_image_new_from_file (iconfile);
-              g_free (iconfile);
-            }
-
-          g_free (icondir);
-        }
-
-      g_free (prgdir);
-    }
-
-  return img;
 }

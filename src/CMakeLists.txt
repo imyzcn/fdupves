@@ -9,6 +9,7 @@ SET (HEADERS
 SET (SOURCES
   util.c
   gui.c
+  fdini.c
   main.c
   )
 

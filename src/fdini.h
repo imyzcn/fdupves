@@ -32,9 +32,29 @@
 
 typedef struct
 {
-  int var;
+  gboolean verbose;
+  gchar *mplayer;
+
+  gboolean proc_image;
+  gchar *image_suffix[0x100];
+
+  gboolean proc_video;
+  gchar *video_suffix[0x100];
+  gint video_compare_cnt;
+
+  gint hash_distance;
+
+  gint hash_size[2];
+
+  gint thumb_size[2];
+
+  gint video_timers[0x10][3];
 } fdini_t;
 
 extern fdini_t * g_ini;
+
+fdini_t * fdini_load (const gchar *);
+
+gboolean fdini_save (fdini_t *, const gchar *);
 
 #endif

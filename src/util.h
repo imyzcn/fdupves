@@ -36,25 +36,20 @@
 /*
  * %s indicate the prefix
  * */
-#define AM_SYS_CONF_FILE   "etc/fdupvesrc"
-#define AM_SYS_ICON_DIR    "share/fdupves/icons"
-#define AM_SYS_LOCALE_DIR  "share/locale"
-#define AM_SYS_PLUGIN_DIR  "lib/fdupves"
+#define FD_SYS_CONF_FILE   "etc/fdupvesrc"
+#define FD_SYS_ICON_DIR    "share/fdupves/icons"
+#define FD_SYS_LOCALE_DIR  "share/locale"
 
 /*
  * ~ indicate the user home
  * */
-#define AM_USR_CONF_DIR    "~/.fdupves"
-#define AM_USR_CONF_FILE   "~/.fdupves/config"
-#define AM_USR_PLUGIN_DIR  "~/.fdupves/plugin"
-
+#define FD_USR_CONF_FILE   "~/.fdupvesrc"
+#define FD_USR_CACHE_FILE  "~/.fdupves.cache"
 
 #define _(S)    gettext (S)
 
-G_MODULE_EXPORT gchar * am_realpath (const gchar *);
+gchar * fd_realpath (const gchar *);
 
-G_MODULE_EXPORT gchar * am_install_path ();
-
-GtkWidget * am_toolbar_icon_new (const gchar *);
+gchar * fd_install_path ();
 
 #endif
