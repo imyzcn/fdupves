@@ -27,6 +27,7 @@
 
 #include "util.h"
 #include "fdini.h"
+#include "ifind.h"
 #include "gui.h"
 
 #include <gtk/gtk.h>
@@ -38,6 +39,9 @@ typedef struct
   GtkWidget *mainvbox;
 
   GtkListStore *dirlist;
+
+  GPtrArray *images;
+  GPtrArray *videos;
 
   GtkListStore *loglist;
 
@@ -57,6 +61,15 @@ static void gui_help_cb (GtkWidget *, gui_t *);
 static gui_t gui[1];
 static void gui_destroy (gui_t *);
 static void gui_destroy_cb (GtkWidget *, GdkEvent *, gui_t *);
+static void gui_add_sames (const gchar *, const gchar *, gui_t *);
+
+static gboolean dir_find_item (GtkTreeModel *,
+			       GtkTreePath *,
+			       GtkTreeIter *,
+			       gui_t *);
+static void gui_list_dir (gui_t *, const gchar *);
+static void gui_list_file (gui_t *, const gchar *);
+static void gui_list_link (gui_t *, const gchar *);
 
 static void dirlist_onactivated (GtkTreeView *,
 				 GtkTreePath *,
@@ -71,10 +84,10 @@ static GtkWidget *restree_opendir_menuitem (gui_t *);
 static GtkWidget *restree_delete_menuitem (gui_t *);
 static GtkWidget *restree_diff_menuitem (gui_t *);
 
-static void restree_open (gui_t *);
-static void restree_opendir (gui_t *);
-static void restree_delete (gui_t *);
-static void restree_diff (gui_t *);
+static void restree_open (GtkMenuItem *, gui_t *);
+static void restree_opendir (GtkMenuItem *, gui_t *);
+static void restree_delete (GtkMenuItem *, gui_t *);
+static void restree_diff (GtkMenuItem *, gui_t *);
 
 gboolean
 gui_init ()
@@ -237,9 +250,12 @@ mainframe_new (gui_t *gui)
 
   typeibut = gtk_check_button_new_with_label (_ ("Image"));
   gtk_box_pack_start (GTK_BOX (typebox), typeibut, FALSE, FALSE, 2);
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (typeibut), g_ini->proc_image);
   g_signal_connect (G_OBJECT (typeibut), "toggled", G_CALLBACK (gui_ibutcb), gui);
+
   typevbut = gtk_check_button_new_with_label (_ ("Video"));
   gtk_box_pack_start (GTK_BOX (typebox), typevbut, FALSE, FALSE, 2);
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (typevbut), g_ini->proc_video);
   g_signal_connect (G_OBJECT (typevbut), "toggled", G_CALLBACK (gui_vbutcb), gui);
 
   /* log win */
@@ -347,19 +363,174 @@ gui_add_cb (GtkWidget *wid, gui_t *gui)
 static void
 gui_find_cb (GtkWidget *wid, gui_t *gui)
 {
-  g_debug ("%s", __FUNCTION__);
+  gui->images = g_ptr_array_new_with_free_func (g_free);
+  gui->videos = g_ptr_array_new_with_free_func (g_free);
+
+  gtk_tree_model_foreach (GTK_TREE_MODEL (gui->dirlist),
+			  (GtkTreeModelForeachFunc) dir_find_item,
+			  gui);
+
+  if (g_ini->proc_image)
+    {
+      g_message ("find %d images to process", gui->images->len);
+      find_images (gui->images, FIND_OK_CB (gui_add_sames), gui);
+    }
+
+  if (g_ini->proc_video)
+    {
+      g_message ("find %d videos to process", gui->videos->len);
+      find_videos (gui->videos, FIND_OK_CB (gui_add_sames), gui);
+    }
+
+  g_ptr_array_free (gui->images, TRUE);
+  g_ptr_array_free (gui->videos, TRUE);
+
 }
 
 static void
 gui_pref_cb (GtkWidget *wid, gui_t *gui)
 {
-  g_debug ("%s", __FUNCTION__);
 }
 
 static void
 gui_help_cb (GtkWidget *wid, gui_t *gui)
 {
-  g_debug ("%s", __FUNCTION__);
+}
+
+static void
+gui_add_sames (const gchar *apath, const gchar *bpath, gui_t *gui)
+{
+  g_debug ("Same: [%s] [%s]", apath, bpath);
+
+}
+
+static gboolean
+dir_find_item (GtkTreeModel *model,
+	       GtkTreePath *tpath,
+	       GtkTreeIter *itr,
+	       gui_t *gui)
+{
+  gchar *path;
+
+  gtk_tree_model_get (model, itr, 0, &path, -1);
+  if (path)
+    {
+      if (g_file_test (path, G_FILE_TEST_IS_DIR))
+	{
+	  gui_list_dir (gui, path);
+	}
+      else if (g_file_test (path, G_FILE_TEST_IS_REGULAR))
+	{
+	  gui_list_file (gui, path);
+	}
+      else if (g_file_test (path, G_FILE_TEST_IS_SYMLINK))
+	{
+	  gui_list_link (gui, path);
+	}
+
+      g_free (path);
+    }
+
+  return FALSE;
+}
+
+static void
+gui_list_dir (gui_t *gui, const gchar *path)
+{
+  GQueue stack[1];
+  GDir *gdir;
+  GError *err;
+  gchar *dir, *curpath;
+  const gchar *cur;
+
+  g_queue_init (stack);
+  dir = g_strdup (path);
+  g_queue_push_tail (stack, dir);
+
+  while ((dir = g_queue_pop_tail (stack)) != NULL)
+    {
+      err = NULL;
+      gdir = g_dir_open (dir, 0, &err);
+      if (err)
+	{
+	  g_error ("Can't open dir: %s: %s", dir, err->message);
+	  g_error_free (err);
+	}
+
+      while ((cur = g_dir_read_name (gdir)) != NULL)
+	{
+	  if (strcmp (cur, ".") == 0
+	      || strcmp (cur, "..") == 0)
+	    {
+	      continue;
+	    }
+
+	  curpath = g_strdup_printf ("%s/%s", dir, cur);
+	  if (g_file_test (curpath, G_FILE_TEST_IS_DIR))
+	    {
+	      g_queue_push_tail (stack, curpath);
+	    }
+	  else if (g_file_test (curpath, G_FILE_TEST_IS_REGULAR))
+	    {
+	      gui_list_file (gui, curpath);
+	      g_free (curpath);
+	    }
+	  else if (g_file_test (curpath, G_FILE_TEST_IS_SYMLINK))
+	    {
+	      gui_list_link (gui, curpath);
+	      g_free (curpath);
+	    }
+	}
+
+      g_dir_close (gdir);
+      g_free (dir);
+    }
+}
+
+static void
+gui_list_file (gui_t *gui, const gchar *path)
+{
+  size_t i, plen, slen;
+  gchar *p, *s;
+
+  plen = strlen (path);
+
+  if (g_ini->proc_image)
+    {
+      for (i = 0; g_ini->image_suffix[i]; ++ i)
+	{
+	  s = g_ini->image_suffix[i];
+	  slen = strlen (s);
+	  p = (gchar *) path + plen - slen;
+	  if (g_ascii_strcasecmp (p, s) == 0)
+	    {
+	      p = g_strdup (path);
+	      g_ptr_array_add (gui->images, p);
+	      break;
+	    }
+	}
+    }
+
+  if (g_ini->proc_video)
+    {
+      for (i = 0; g_ini->video_suffix[i]; ++ i)
+	{
+	  s = g_ini->video_suffix[i];
+	  slen = strlen (s);
+	  p = (gchar *) path + plen - slen;
+	  if (g_ascii_strcasecmp (p, s) == 0)
+	    {
+	      p = g_strdup (path);
+	      g_ptr_array_add (gui->videos, p);
+	      break;
+	    }
+	}
+    }
+}
+
+static void
+gui_list_link (gui_t *gui, const gchar *path)
+{
 }
 
 static void
@@ -369,10 +540,10 @@ gui_destroy_cb (GtkWidget *but, GdkEvent *ev, gui_t *gui)
   gint ret;
 
   dia = gtk_message_dialog_new (GTK_WINDOW (gui->widget),
-                                GTK_DIALOG_DESTROY_WITH_PARENT,
-                                GTK_MESSAGE_INFO,
-                                GTK_BUTTONS_YES_NO,
-                                _ ("Are you sure you want to quit fdupves? ")
+				GTK_DIALOG_DESTROY_WITH_PARENT,
+				GTK_MESSAGE_INFO,
+				GTK_BUTTONS_YES_NO,
+				_ ("Are you sure you want to quit fdupves? ")
 				);
 
   ret = gtk_dialog_run (GTK_DIALOG (dia));
@@ -414,7 +585,7 @@ restree_onbutpress (GtkWidget *wid,
 		    gui_t *gui)
 {
   GtkWidget *menu, *item;
-  int button, event_time, selcnt;
+  int selcnt;
 
   if (event->button != 3 || event->type != GDK_BUTTON_PRESS)
     {
@@ -422,7 +593,6 @@ restree_onbutpress (GtkWidget *wid,
     }
 
   selcnt = gtk_tree_selection_count_selected_rows (gui->resselect);
-  g_debug ("selected %d", selcnt);
   if (selcnt == 0)
     {
       return FALSE;
@@ -430,7 +600,7 @@ restree_onbutpress (GtkWidget *wid,
 
   menu = gtk_menu_new ();
   g_signal_connect (menu, "deactivate",
-                    G_CALLBACK (gtk_widget_destroy), NULL);
+		    G_CALLBACK (gtk_widget_destroy), NULL);
   switch (selcnt)
     {
     case 1:
@@ -455,21 +625,10 @@ restree_onbutpress (GtkWidget *wid,
       break;
     }
 
-  if (event)
-    {
-      button = event->button;
-      event_time = event->time;
-    }
-  else
-    {
-      button = 0;
-      event_time = gtk_get_current_event_time ();
-    }
-
   gtk_menu_set_title (GTK_MENU (menu), _ ("process file"));
-  gtk_menu_attach_to_widget (GTK_MENU (menu), wid, NULL);
+  gtk_widget_show_all (menu);
   gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL,
-                  button, event_time);
+		  event->button, event->time);
 
   return TRUE;
 }
@@ -519,18 +678,18 @@ restree_diff_menuitem (gui_t *gui)
 }
 
 static void
-restree_open (gui_t *gui)
+restree_open (GtkMenuItem *item, gui_t *gui)
 {
 }
 static void
-restree_opendir (gui_t *gui)
+restree_opendir (GtkMenuItem *item, gui_t *gui)
 {
 }
 static void
-restree_delete (gui_t *gui)
+restree_delete (GtkMenuItem *item, gui_t *gui)
 {
 }
 static void
-restree_diff (gui_t *gui)
+restree_diff (GtkMenuItem *item, gui_t *gui)
 {
 }

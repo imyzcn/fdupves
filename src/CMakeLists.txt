@@ -4,12 +4,16 @@ SET (HEADERS
   util.h
   gui.h
   fdini.h
+  ihash.h
+  ifind.h
   )
 
 SET (SOURCES
   util.c
   gui.c
   fdini.c
+  ihash.c
+  ifind.c
   main.c
   )
 
