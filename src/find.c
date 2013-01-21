@@ -24,9 +24,9 @@
  *  Author: Alf <naihe2010@126.com>
  */
 
-#include "ifind.h"
-#include "ihash.h"
-#include "fdini.h"
+#include "find.h"
+#include "hash.h"
+#include "ini.h"
 
 void
 find_images (GPtrArray *ptr, find_ok_cb cb, gpointer arg)
@@ -63,4 +63,16 @@ find_images (GPtrArray *ptr, find_ok_cb cb, gpointer arg)
 void
 find_videos (GPtrArray *ptr, find_ok_cb cb, gpointer arg)
 {
+  gsize i;
+  char filename[0x200];
+
+  for (i = 0; i < ptr->len; ++ i)
+    {
+      video_get_info (g_ptr_array_index (ptr, i));
+      g_snprintf (filename, sizeof filename, "/tmp/%ld.jpg", i);
+      video_time_screenshot_file (g_ptr_array_index (ptr, i),
+				  10.0,
+				  500, 400,
+				  filename);
+    }
 }

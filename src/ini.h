@@ -19,17 +19,42 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
-/* @CFILE gui.h
+/* @CFILE fdini.h
  *
  *  Author: Alf <naihe2010@126.com>
  */
-/* @date Created: 2013/01/16 11:35:09 Alf*/
+/* @date Created: 2013/01/16 11:02:08 Alf*/
 
-#ifndef _FDUPVES_GUI_H_
-#define _FDUPVES_GUI_H_
+#ifndef _FDUPVES_INI_H_
+#define _FDUPVES_INI_H_
 
-#include <gtk/gtk.h>
+#include <glib.h>
 
-gboolean gui_init (int argc, char *argv[]);
+typedef struct
+{
+  gboolean verbose;
+  gchar *mplayer;
+
+  gboolean proc_image;
+  gchar *image_suffix[0x100];
+
+  gboolean proc_video;
+  gchar *video_suffix[0x100];
+  gint video_compare_cnt;
+
+  gint hash_distance;
+
+  gint hash_size[2];
+
+  gint thumb_size[2];
+
+  gint video_timers[0x10][3];
+} fdini_t;
+
+extern fdini_t * g_ini;
+
+fdini_t * fdini_load (const gchar *);
+
+gboolean fdini_save (fdini_t *, const gchar *);
 
 #endif

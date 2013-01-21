@@ -24,14 +24,16 @@
  *  Author: Alf <naihe2010@126.com>
  */
 
-#ifndef _FDUPVES_IHASH_H_
-#define _FDUPVES_IHASH_H_
+#ifndef _FDUPVES_HASH_H_
+#define _FDUPVES_HASH_H_
 
 typedef unsigned long long hash_t;
 
 hash_t file_hash (const char *);
 
 hash_t buffer_hash (const char *, int);
+
+hash_t video_time_hash (const char *, double);
 
 int hash_cmp (hash_t, hash_t);
 

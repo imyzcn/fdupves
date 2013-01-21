@@ -24,8 +24,8 @@
  *  Author: Alf <naihe2010@126.com>
  */
 
-#ifndef _FDUPVES_IFIND_H_
-#define _FDUPVES_IFIND_H_
+#ifndef _FDUPVES_FIND_H_
+#define _FDUPVES_FIND_H_
 
 #include <glib.h>
 

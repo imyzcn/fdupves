@@ -3,17 +3,19 @@ CMAKE_MINIMUM_REQUIRED (VERSION 2.6)
 SET (HEADERS
   util.h
   gui.h
-  fdini.h
-  ihash.h
-  ifind.h
+  ini.h
+  hash.h
+  find.h
+  video.h
   )
 
 SET (SOURCES
   util.c
   gui.c
-  fdini.c
-  ihash.c
-  ifind.c
+  ini.c
+  hash.c
+  find.c
+  video.c
   main.c
   )
 
@@ -22,6 +24,8 @@ TARGET_LINK_LIBRARIES (fdupves
   ${GTK2_LIBRARIES}
   ${AVFORMAT_LIBRARIES}
   ${AVCODEC_LIBRARIES}
+  ${AVUTIL_LIBRARIES}
+  ${SWSCALE_LIBRARIES}
   )
 
 IF (WIN32)

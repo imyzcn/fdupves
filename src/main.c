@@ -26,8 +26,10 @@
 /* @date Created: 2013/01/16 10:12:33 Alf*/
 
 #include "gui.h"
-#include "fdini.h"
+#include "ini.h"
 #include "util.h"
+
+#include <libavformat/avformat.h>
 
 #include <gtk/gtk.h>
 #include <glib/gstdio.h>
@@ -70,15 +72,18 @@ main (int argc, char *argv[])
       g_free (localedir);
     }
 
-  //  curl_global_init (CURL_GLOBAL_ALL);
+  /* av format init */
+  av_register_all ();
+  
   fdini_load (NULL);
 
   gtk_init (&argc, &argv);
 
   init (argc, argv);
 
-  gui_init ();
+  gui_init (argc, argv);
 
+  
 #ifdef FDUPVES_ENABLE_PROFILER
   ProfilerStart ("fdupves.prof");
 #endif

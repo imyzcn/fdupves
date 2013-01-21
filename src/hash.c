@@ -24,8 +24,8 @@
  *  Author: Alf <naihe2010@126.com>
  */
 
-#include "ihash.h"
-#include "fdini.h"
+#include "hash.h"
+#include "ini.h"
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
@@ -158,4 +158,14 @@ hash_cmp (hash_t a, hash_t b)
     }
 
   return cmp;
+}
+
+hash_t
+video_time_hash (const char *file, double time)
+{
+  hash_t v;
+
+  v = 0;
+
+  return v;
 }

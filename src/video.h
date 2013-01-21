@@ -1,6 +1,6 @@
 /*
- * This file is part of the fdupves package
- * Copyright (C) <2010>  <Alf>
+ * This file is part of the fdvupes package
+ * Copyright (C) <2008> Alf
  *
  * Contact: Alf <naihe2010@126.com>
  *
@@ -19,42 +19,40 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
-/* @CFILE fdini.h
+/* @CFILE video.h
  *
  *  Author: Alf <naihe2010@126.com>
  */
-/* @date Created: 2013/01/16 11:02:08 Alf*/
 
-#ifndef _FDUPVES_AMINI_H_
-#define _FDUPVES_AMINI_H_
-
-#include <glib.h>
+#ifndef _FDUPVES_VIDEO_H_
+#define _FDUPVES_VIDEO_H_
 
 typedef struct
 {
-  gboolean verbose;
-  gchar *mplayer;
+  /* filename */
+  char *filename;
 
-  gboolean proc_image;
-  gchar *image_suffix[0x100];
+  /* path */
+  char *path;
 
-  gboolean proc_video;
-  gchar *video_suffix[0x100];
-  gint video_compare_cnt;
+  /* Format */
+  const char *format;
 
-  gint hash_distance;
+  /* Duration */
+  double length;
 
-  gint hash_size[2];
+  /* Size */
+  int size[2];
+} video_info;
 
-  gint thumb_size[2];
+video_info * video_get_info (const char *file);
 
-  gint video_timers[0x10][3];
-} fdini_t;
+int video_time_screenshot (const char *file, double time,
+			   int width, int height,
+			   char *buffer, int buf_len);
 
-extern fdini_t * g_ini;
-
-fdini_t * fdini_load (const gchar *);
-
-gboolean fdini_save (fdini_t *, const gchar *);
+int video_time_screenshot_file (const char *file, double time,
+				int width, int height,
+				const char *out_file);
 
 #endif

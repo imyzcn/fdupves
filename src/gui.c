@@ -26,8 +26,8 @@
 /* @date Created: 2013/01/16 13:36:10 Alf*/
 
 #include "util.h"
-#include "fdini.h"
-#include "ifind.h"
+#include "ini.h"
+#include "find.h"
 #include "gui.h"
 
 #include <gtk/gtk.h>
@@ -61,6 +61,7 @@ static void gui_help_cb (GtkWidget *, gui_t *);
 static gui_t gui[1];
 static void gui_destroy (gui_t *);
 static void gui_destroy_cb (GtkWidget *, GdkEvent *, gui_t *);
+static void gui_add_dir (gui_t *, const gchar *);
 static void gui_add_sames (const gchar *, const gchar *, gui_t *);
 
 static gboolean dir_find_item (GtkTreeModel *,
@@ -90,8 +91,10 @@ static void restree_delete (GtkMenuItem *, gui_t *);
 static void restree_diff (GtkMenuItem *, gui_t *);
 
 gboolean
-gui_init ()
+gui_init (int argc, char *argv[])
 {
+  int i;
+
   gui->widget = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 
   gtk_window_set_title (GTK_WINDOW (gui->widget), "fdupves 0.0.1");
@@ -108,6 +111,11 @@ gui_init ()
   statusbar_new (gui);
 
   gtk_widget_show_all (gui->widget);
+
+  for (i = 1; i < argc; ++ i)
+    {
+      gui_add_dir (gui, argv[i]);
+    }
 
   return TRUE;
 }
@@ -304,18 +312,6 @@ mainframe_new (gui_t *gui)
   g_signal_connect (G_OBJECT (tree), "button-press-event",
 		    G_CALLBACK (restree_onbutpress), gui);
 
-  //for test
-  {
-    GtkTreeIter itr[1];
-
-    gtk_tree_store_append (gui->restree, itr, NULL);
-    gtk_tree_store_set (gui->restree, itr, 0, "item1", -1);
-    gtk_tree_store_append (gui->restree, itr, NULL);
-    gtk_tree_store_set (gui->restree, itr, 0, "item2", -1);
-    gtk_tree_store_append (gui->restree, itr, NULL);
-    gtk_tree_store_set (gui->restree, itr, 0, "item3", -1);
-  }
-
   gtk_paned_add2 (GTK_PANED (hpaned), win);
 }
 
@@ -326,6 +322,15 @@ statusbar_new (gui_t *gui)
 
   status = gtk_statusbar_new ();
   gtk_box_pack_end (GTK_BOX (gui->mainvbox), status, FALSE, FALSE, 2);
+}
+
+static void
+gui_add_dir (gui_t *gui, const char *path)
+{
+  GtkTreeIter itr[1];
+
+  gtk_list_store_append (gui->dirlist, itr);
+  gtk_list_store_set (gui->dirlist, itr, 0, path, -1);
 }
 
 static void
@@ -346,13 +351,11 @@ gui_add_cb (GtkWidget *wid, gui_t *gui)
   if (gtk_dialog_run (GTK_DIALOG (dia)) == GTK_RESPONSE_OK)
     {
       GSList *list, *cur;
-      GtkTreeIter itr[1];
 
       list = gtk_file_chooser_get_filenames (GTK_FILE_CHOOSER (dia));
       for (cur = list; cur; cur = g_slist_next (cur))
         {
-          gtk_list_store_append (gui->dirlist, itr);
-	  gtk_list_store_set (gui->dirlist, itr, 0, cur->data, -1);
+	  gui_add_dir (gui, cur->data);
 	  g_free (cur->data);
         }
       g_slist_free (list);
@@ -397,11 +400,83 @@ gui_help_cb (GtkWidget *wid, gui_t *gui)
 {
 }
 
+struct treefind_arg
+{
+  const gchar *text;
+  gboolean find;
+  GtkTreeIter itr[1];
+};
+
+static gboolean
+tree_find (GtkTreeModel *model,
+	   GtkTreePath *path,
+	   GtkTreeIter *iter,
+	   struct treefind_arg *arg)
+{
+  gchar *value;
+
+  gtk_tree_model_get (model, iter, 0, &value, -1);
+  if (g_ascii_strcasecmp (value, arg->text) == 0)
+    {
+      memcpy (arg->itr, iter, sizeof (*iter));
+      arg->find = TRUE;
+    }
+
+  return arg->find;
+}
+
 static void
 gui_add_sames (const gchar *apath, const gchar *bpath, gui_t *gui)
 {
-  g_debug ("Same: [%s] [%s]", apath, bpath);
+  GtkTreeIter itr[1], itrc[1];
+  struct treefind_arg arg[1];
 
+  arg->text = apath;
+  arg->find = FALSE;
+  gtk_tree_model_foreach (GTK_TREE_MODEL (gui->restree),
+			  (GtkTreeModelForeachFunc) tree_find,
+			  arg);
+  if (arg->find)
+    {
+      if (gtk_tree_model_iter_parent (GTK_TREE_MODEL (gui->restree),
+				      itr,
+				      arg->itr))
+	{
+	  gtk_tree_store_append (gui->restree, itrc, itr);
+	}
+      else
+	{
+	  gtk_tree_store_append (gui->restree, itrc, NULL);
+	}
+      gtk_tree_store_set (gui->restree, itrc, 0, bpath, -1);
+      return;
+    }
+
+  arg->text = bpath;
+  arg->find = FALSE;
+  gtk_tree_model_foreach (GTK_TREE_MODEL (gui->restree),
+			  (GtkTreeModelForeachFunc) tree_find,
+			  arg);
+  if (arg->find)
+    {
+      if (gtk_tree_model_iter_parent (GTK_TREE_MODEL (gui->restree),
+				      itr,
+				      arg->itr))
+	{
+	  gtk_tree_store_append (gui->restree, itrc, itr);
+	}
+      else
+	{
+	  gtk_tree_store_append (gui->restree, itrc, NULL);
+	}
+      gtk_tree_store_set (gui->restree, itrc, 0, apath, -1);
+      return;
+    }
+
+  gtk_tree_store_append (gui->restree, itr, NULL);
+  gtk_tree_store_set (gui->restree, itr, 0, apath, -1);
+  gtk_tree_store_append (gui->restree, itrc, itr);
+  gtk_tree_store_set (gui->restree, itrc, 0, bpath, -1);
 }
 
 static gboolean

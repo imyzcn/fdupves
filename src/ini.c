@@ -25,7 +25,7 @@
  */
 /* @date Created: 2013/01/16 12:03:42 Alf*/
 
-#include "fdini.h"
+#include "ini.h"
 
 #include <glib.h>
 
