@@ -33,7 +33,7 @@ hash_t file_hash (const char *);
 
 hash_t buffer_hash (const char *, int);
 
-hash_t video_time_hash (const char *, double);
+hash_t video_time_hash (const char *, int);
 
 int hash_cmp (hash_t, hash_t);
 

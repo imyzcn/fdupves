@@ -25,6 +25,7 @@
  */
 
 #include "hash.h"
+#include "video.h"
 #include "ini.h"
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -66,10 +67,15 @@ buffer_hash (const char *buffer, int size)
   hash_t h;
 
   err = NULL;
-  buf = gdk_pixbuf_new_from_inline (size,
-				    (const guint8 *) buffer,
-				    FALSE,
-				    &err);
+  buf = gdk_pixbuf_new_from_data ((const guchar *) buffer,
+				  GDK_COLORSPACE_RGB,
+				  FALSE,
+				  8,
+				  g_ini->hash_size[0],
+				  g_ini->hash_size[1],
+				  g_ini->hash_size[0] * 3,
+				  NULL,
+				  &err);
   if (err)
     {
       g_error ("Load inline data to pixbuf failed: %s", err->message);
@@ -161,11 +167,21 @@ hash_cmp (hash_t a, hash_t b)
 }
 
 hash_t
-video_time_hash (const char *file, double time)
+video_time_hash (const char *file, int time)
 {
   hash_t v;
+  gchar *buffer;
+  gsize len;
 
-  v = 0;
+  len = g_ini->hash_size[0] * g_ini->hash_size[1] * 3;
+  buffer = g_malloc (len);
+  g_return_val_if_fail (buffer, 0);
+
+  video_time_screenshot (file, time,
+			 g_ini->hash_size[0], g_ini->hash_size[1],
+			 buffer, len);
+
+  v = buffer_hash (buffer, len);
 
   return v;
 }

@@ -33,6 +33,13 @@
 #include <gtk/gtk.h>
 #include <string.h>
 
+struct same_node
+{
+  same_type type;
+  GSList *files;
+  GtkTreeRowReference *ref;
+};
+
 typedef struct
 {
   GtkWidget *widget;
@@ -47,6 +54,7 @@ typedef struct
 
   GtkTreeStore *restree;
   GtkTreeSelection *resselect;
+  GSList *same_list;
 } gui_t;
 
 static void toolbar_new (gui_t *);
@@ -62,7 +70,7 @@ static gui_t gui[1];
 static void gui_destroy (gui_t *);
 static void gui_destroy_cb (GtkWidget *, GdkEvent *, gui_t *);
 static void gui_add_dir (gui_t *, const gchar *);
-static void gui_add_sames (const gchar *, const gchar *, gui_t *);
+static void gui_add_same (const gchar *, const gchar *, same_type, gui_t *);
 
 static gboolean dir_find_item (GtkTreeModel *,
 			       GtkTreePath *,
@@ -381,13 +389,13 @@ gui_find_cb (GtkWidget *wid, gui_t *gui)
   if (g_ini->proc_image)
     {
       g_message ("find %d images to process", gui->images->len);
-      find_images (gui->images, FIND_OK_CB (gui_add_sames), gui);
+      find_images (gui->images, (find_result_cb) (gui_add_same), gui);
     }
 
   if (g_ini->proc_video)
     {
       g_message ("find %d videos to process", gui->videos->len);
-      find_videos (gui->videos, FIND_OK_CB (gui_add_sames), gui);
+      find_videos (gui->videos, (find_result_cb) (gui_add_same), gui);
     }
 
   g_ptr_array_free (gui->images, TRUE);
@@ -405,83 +413,84 @@ gui_help_cb (GtkWidget *wid, gui_t *gui)
 {
 }
 
-struct treefind_arg
-{
-  const gchar *text;
-  gboolean find;
-  GtkTreeIter itr[1];
-};
-
-static gboolean
-tree_find (GtkTreeModel *model,
-	   GtkTreePath *path,
-	   GtkTreeIter *iter,
-	   struct treefind_arg *arg)
-{
-  gchar *value;
-
-  gtk_tree_model_get (model, iter, 0, &value, -1);
-  if (g_ascii_strcasecmp (value, arg->text) == 0)
-    {
-      memcpy (arg->itr, iter, sizeof (*iter));
-      arg->find = TRUE;
-    }
-
-  return arg->find;
-}
-
 static void
-gui_add_sames (const gchar *apath, const gchar *bpath, gui_t *gui)
+gui_add_same (const gchar *apath, const gchar *bpath,
+	      same_type type, gui_t *gui)
 {
   GtkTreeIter itr[1], itrc[1];
-  struct treefind_arg arg[1];
+  GSList *list, *cur;
+  struct same_node *node;
+  const gchar *newpath;
+  gboolean afind, bfind;
+  GtkTreePath *treepath;
 
-  arg->text = apath;
-  arg->find = FALSE;
-  gtk_tree_model_foreach (GTK_TREE_MODEL (gui->restree),
-			  (GtkTreeModelForeachFunc) tree_find,
-			  arg);
-  if (arg->find)
+  afind = FALSE;
+  bfind = FALSE;
+
+  for (list = gui->same_list; list; list = g_slist_next (list))
     {
-      if (gtk_tree_model_iter_parent (GTK_TREE_MODEL (gui->restree),
-				      itr,
-				      arg->itr))
+      node = list->data;
+
+      if (node->type != type)
 	{
-	  gtk_tree_store_append (gui->restree, itrc, itr);
+	  continue;
 	}
-      else
+
+      for (cur = node->files; cur; cur = g_slist_next (cur))
 	{
-	  gtk_tree_store_append (gui->restree, itrc, NULL);
+	  if (strcmp (cur->data, apath) == 0)
+	    {
+	      newpath = bpath;
+	      afind = TRUE;
+	    }
+	  else if (strcmp (cur->data, bpath) == 0)
+	    {
+	      newpath = apath;
+	      bfind = TRUE;
+	    }
 	}
+
+      if (afind && bfind)
+	{
+	  return;
+	}
+      if (afind || bfind)
+	{
+	  break;
+	}
+    }
+
+  if ((!afind) && (!bfind))
+    {
+      gtk_tree_store_append (gui->restree, itr, NULL);
+      gtk_tree_store_set (gui->restree, itr, 0, apath, -1);
+      gtk_tree_store_append (gui->restree, itrc, itr);
       gtk_tree_store_set (gui->restree, itrc, 0, bpath, -1);
-      return;
-    }
 
-  arg->text = bpath;
-  arg->find = FALSE;
-  gtk_tree_model_foreach (GTK_TREE_MODEL (gui->restree),
-			  (GtkTreeModelForeachFunc) tree_find,
-			  arg);
-  if (arg->find)
+      node = g_malloc0 (sizeof (struct same_node));
+      node->type = type;
+      node->files = g_slist_append (node->files, g_strdup (apath));
+      node->files = g_slist_append (node->files, g_strdup (bpath));
+      treepath = gtk_tree_model_get_path (GTK_TREE_MODEL (gui->restree),
+					  itr);
+      node->ref = gtk_tree_row_reference_new (GTK_TREE_MODEL (gui->restree),
+					      treepath);
+      gtk_tree_path_free (treepath);
+
+      gui->same_list = g_slist_append (gui->same_list, node);
+    }
+  else
     {
-      if (gtk_tree_model_iter_parent (GTK_TREE_MODEL (gui->restree),
-				      itr,
-				      arg->itr))
-	{
-	  gtk_tree_store_append (gui->restree, itrc, itr);
-	}
-      else
-	{
-	  gtk_tree_store_append (gui->restree, itrc, NULL);
-	}
-      gtk_tree_store_set (gui->restree, itrc, 0, apath, -1);
-      return;
-    }
+      treepath = gtk_tree_row_reference_get_path (node->ref);
+      gtk_tree_model_get_iter (GTK_TREE_MODEL (gui->restree),
+			       itr,
+			       treepath);
+      gtk_tree_path_free (treepath);
+      gtk_tree_store_append (gui->restree, itrc, itr);
+      gtk_tree_store_set (gui->restree, itrc, 0, newpath, -1);
 
-  gtk_tree_store_append (gui->restree, itr, NULL);
-  gtk_tree_store_set (gui->restree, itr, 0, apath, -1);
-  gtk_tree_store_append (gui->restree, itrc, itr);
-  gtk_tree_store_set (gui->restree, itrc, 0, bpath, -1);
+      node->files = g_slist_append (node->files, (gpointer) newpath);
+    }
 }
 
 static gboolean
@@ -577,7 +586,7 @@ gui_list_file (gui_t *gui, const gchar *path)
 
   if (g_ini->proc_image)
     {
-      for (i = 0; g_ini->image_suffix[i]; ++ i)
+      for (i = 0; g_ini->image_suffix[i][0]; ++ i)
 	{
 	  s = g_ini->image_suffix[i];
 	  slen = strlen (s);
@@ -593,7 +602,7 @@ gui_list_file (gui_t *gui, const gchar *path)
 
   if (g_ini->proc_video)
     {
-      for (i = 0; g_ini->video_suffix[i]; ++ i)
+      for (i = 0; g_ini->video_suffix[i][0]; ++ i)
 	{
 	  s = g_ini->video_suffix[i];
 	  slen = strlen (s);

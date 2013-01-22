@@ -29,11 +29,18 @@
 
 #include <glib.h>
 
-#define FIND_OK_CB(f) (void (*) (const gchar *, const gchar *, gpointer)) (f)
-typedef void (*find_ok_cb) (const gchar *, const gchar *, gpointer);
+typedef enum
+  {
+    FD_SAME_IMAGE,
+    FD_SAME_VIDEO_HEAD,
+    FD_SAME_VIDEO_TAIL,
+    FD_SAME_VIDEO_ALL,
+  } same_type;
 
-void find_images (GPtrArray *, find_ok_cb, gpointer);
+typedef void (*find_result_cb) (const gchar *, const gchar *, same_type, gpointer);
 
-void find_videos (GPtrArray *, find_ok_cb, gpointer);
+void find_images (GPtrArray *, find_result_cb, gpointer);
+
+void find_videos (GPtrArray *, find_result_cb, gpointer);
 
 #endif

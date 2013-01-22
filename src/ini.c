@@ -86,14 +86,20 @@ ini_new ()
   ini->proc_image = FALSE;
   for (i = 0; i < sizeof (isuffix) / sizeof (isuffix[0]); ++ i)
     {
-      ini->image_suffix[i] = g_strdup (isuffix[i]);
+      g_snprintf (ini->image_suffix[i],
+		  sizeof (ini->image_suffix[i]), "%s",
+		  isuffix[i]);
     }
+  ini->image_suffix[i][0] = 0;
 
   ini->proc_video = TRUE;
   for (i = 0; i < sizeof (vsuffix) / sizeof (vsuffix[0]); ++ i)
     {
-      ini->video_suffix[i] = g_strdup (vsuffix[i]);
+      g_snprintf (ini->video_suffix[i],
+		  sizeof (ini->video_suffix[i]), "%s",
+		  vsuffix[i]);
     }
+  ini->video_suffix[i][0] = 0;
 
   ini->hash_distance = 2;
 
@@ -103,10 +109,19 @@ ini_new ()
   ini->thumb_size[0] = 512;
   ini->thumb_size[1] = 384;
 
-  ini->video_timers[0] = 1;
-  ini->video_timers[1] = 10;
-  ini->video_timers[2] = 60;
-  ini->video_timers[3] = 300;
+  ini->video_timers[0][0] = 10;
+  ini->video_timers[0][1] = 120;
+  ini->video_timers[0][2] = 4;
+  ini->video_timers[1][0] = 60;
+  ini->video_timers[1][1] = 600;
+  ini->video_timers[1][2] = 25;
+  ini->video_timers[2][0] = 300;
+  ini->video_timers[2][1] = 3000;
+  ini->video_timers[2][2] = 120;
+  ini->video_timers[3][0] = 1500;
+  ini->video_timers[3][1] = 28800;
+  ini->video_timers[3][2] = 600;
+  ini->video_timers[4][0] = 0;
 
   return ini;
 }

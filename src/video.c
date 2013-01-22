@@ -75,19 +75,38 @@ video_get_info (const char *file)
   info->size[1] = stream->codec->height;
   info->format = g_strdup (avcodec_get_name (stream->codec->codec_id));
 
-  g_debug ("filename: %s", info->filename);
-  g_debug ("path: %s", info->path);
-  g_debug ("length: %'.2f", info->length);
-  g_debug ("size: [%d:%d]", info->size[0], info->size[1]);
-  g_debug ("format: %s", info->format);
-
   avformat_close_input (&fmt_ctx);
 
   return info;
 }
 
+void
+video_info_free (video_info *info)
+{
+  g_free (info->filename);
+  g_free (info->path);
+  g_free (info);
+}
+
 int
-video_time_screenshot (const char *file, double time,
+video_get_length (const char *file)
+{
+  video_info *info;
+  int length;
+
+  length = 0;
+  info = video_get_info (file);
+  if (info)
+    {
+      length = (int) info->length;
+      video_info_free (info);
+    }
+
+  return length;
+}
+
+int
+video_time_screenshot (const char *file, int time,
 		       int width, int height,
 		       char *buffer, int buf_len)
 {
@@ -97,6 +116,7 @@ video_time_screenshot (const char *file, double time,
   AVFrame *frame,*frame_rgb;
   AVPacket packet;
   int s, i, bytes, finished;
+  int64_t seek_target;
 
   if (avformat_open_input (&format_ctx, file, NULL, NULL) != 0)
     {
@@ -165,9 +185,13 @@ video_time_screenshot (const char *file, double time,
 		  PIX_FMT_RGB24,
 		  width, height);
 
+  seek_target = av_rescale (time,
+			    format_ctx->streams[s]->time_base.den,
+			    format_ctx->streams[s]->time_base.num);
   avformat_seek_file (format_ctx, s,
-		      INT64_MIN, time * AV_TIME_BASE, INT64_MAX,
-		      0);
+		      0, seek_target, seek_target,
+		      AVSEEK_FLAG_FRAME);
+
   while (av_read_frame (format_ctx, &packet) >= 0)
     {
       if (packet.stream_index == s)
@@ -213,7 +237,7 @@ video_time_screenshot (const char *file, double time,
 }
 
 int
-video_time_screenshot_file (const char *file, double time,
+video_time_screenshot_file (const char *file, int time,
 			    int width, int height,
 			    const char *out_file)
 {

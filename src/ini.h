@@ -35,10 +35,10 @@ typedef struct
   gboolean verbose;
 
   gboolean proc_image;
-  gchar *image_suffix[0x100];
+  gchar image_suffix[0x100][6];
 
   gboolean proc_video;
-  gchar *video_suffix[0x100];
+  gchar video_suffix[0x100][6];
 
   gint hash_distance;
 
@@ -46,7 +46,7 @@ typedef struct
 
   gint thumb_size[2];
 
-  gint video_timers[0x10];
+  gint video_timers[0x10][3];
 
   /* Private values */
   GKeyFile *keyfile;

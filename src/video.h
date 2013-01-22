@@ -47,11 +47,15 @@ typedef struct
 
 video_info * video_get_info (const char *file);
 
-int video_time_screenshot (const char *file, double time,
+void video_info_free (video_info *info);
+
+int video_get_length (const char *file);
+
+int video_time_screenshot (const char *file, int time,
 			   int width, int height,
 			   char *buffer, int buf_len);
 
-int video_time_screenshot_file (const char *file, double time,
+int video_time_screenshot_file (const char *file, int time,
 				int width, int height,
 				const char *out_file);
 
