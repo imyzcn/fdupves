@@ -95,6 +95,11 @@ gui_init (int argc, char *argv[])
 {
   int i;
 
+  if (ini_new_with_file (FD_USR_CONF_FILE) == FALSE)
+    {
+      ini_new ();
+    }
+
   gui->widget = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 
   gtk_window_set_title (GTK_WINDOW (gui->widget), "fdupves 0.0.1");
@@ -633,6 +638,8 @@ gui_destroy_cb (GtkWidget *but, GdkEvent *ev, gui_t *gui)
 static void
 gui_destroy (gui_t *gui)
 {
+  ini_save (g_ini, FD_USR_CONF_FILE);
+
   gtk_widget_destroy (gui->widget);
   gtk_main_quit ();
 }

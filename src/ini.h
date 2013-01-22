@@ -33,14 +33,12 @@
 typedef struct
 {
   gboolean verbose;
-  gchar *mplayer;
 
   gboolean proc_image;
   gchar *image_suffix[0x100];
 
   gboolean proc_video;
   gchar *video_suffix[0x100];
-  gint video_compare_cnt;
 
   gint hash_distance;
 
@@ -48,13 +46,21 @@ typedef struct
 
   gint thumb_size[2];
 
-  gint video_timers[0x10][3];
-} fdini_t;
+  gint video_timers[0x10];
 
-extern fdini_t * g_ini;
+  /* Private values */
+  GKeyFile *keyfile;
 
-fdini_t * fdini_load (const gchar *);
+} ini_t;
 
-gboolean fdini_save (fdini_t *, const gchar *);
+extern ini_t * g_ini;
+
+ini_t * ini_new ();
+
+ini_t * ini_new_with_file (const gchar *);
+
+gboolean ini_load (ini_t *, const gchar *);
+
+gboolean ini_save (ini_t *, const gchar *);
 
 #endif

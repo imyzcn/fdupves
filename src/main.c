@@ -45,8 +45,6 @@
 #include <google/profiler.h>
 #endif
 
-static fdini_t *init (int argc, char *argv[]);
-
 int
 main (int argc, char *argv[])
 {
@@ -74,16 +72,11 @@ main (int argc, char *argv[])
 
   /* av format init */
   av_register_all ();
-  
-  fdini_load (NULL);
 
   gtk_init (&argc, &argv);
 
-  init (argc, argv);
-
   gui_init (argc, argv);
 
-  
 #ifdef FDUPVES_ENABLE_PROFILER
   ProfilerStart ("fdupves.prof");
 #endif
@@ -92,11 +85,5 @@ main (int argc, char *argv[])
   ProfilerStop ();
 #endif
 
-  return 0;
-}
-
-static fdini_t *
-init (int argc, char *argv[])
-{
   return 0;
 }
