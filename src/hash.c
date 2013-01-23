@@ -182,6 +182,7 @@ video_time_hash (const char *file, int time)
 			 buffer, len);
 
   v = buffer_hash (buffer, len);
+  g_free (buffer);
 
   return v;
 }

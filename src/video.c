@@ -73,7 +73,7 @@ video_get_info (const char *file)
   info->length = stream->duration * stream->time_base.num / stream->time_base.den;
   info->size[0] = stream->codec->width;
   info->size[1] = stream->codec->height;
-  info->format = g_strdup (avcodec_get_name (stream->codec->codec_id));
+  info->format = avcodec_get_name (stream->codec->codec_id);
 
   avformat_close_input (&fmt_ctx);
 
@@ -219,6 +219,8 @@ video_time_screenshot (const char *file, int time,
 		       (const uint8_t * const *) frame->data, frame->linesize,
 		       0, codec_ctx->height,
 		       frame_rgb->data, frame_rgb->linesize);
+	    sws_freeContext (img_convert_ctx);
+	    av_free_packet(&packet);
 	    break;
 	  } /* end if (finished) */
 	} /* end if (packet.stream_index */

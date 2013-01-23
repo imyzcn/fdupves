@@ -34,13 +34,20 @@ typedef enum
     FD_SAME_IMAGE,
     FD_SAME_VIDEO_HEAD,
     FD_SAME_VIDEO_TAIL,
-    FD_SAME_VIDEO_ALL,
   } same_type;
 
-typedef void (*find_result_cb) (const gchar *, const gchar *, same_type, gpointer);
+typedef struct
+{
+  same_type type;
+  GSList *files;
+} same_node;
 
-void find_images (GPtrArray *, find_result_cb, gpointer);
+GSList * find_images (GPtrArray *);
 
-void find_videos (GPtrArray *, find_result_cb, gpointer);
+GSList * find_videos (GPtrArray *);
+
+void same_node_free (same_node *);
+
+void same_list_free (GSList *);
 
 #endif
