@@ -61,14 +61,14 @@ typedef struct
   GtkWidget *content;
   GtkWidget *container;
 
-  same_type type;
+  GtkWidget *butprev, *butnext;
 
   video_info *ainfo;
   video_info *binfo;
 
   gboolean from_tail;
 
-  gint count;
+  gint index;
 
   gint alen;
   gint blen;
@@ -989,10 +989,11 @@ video2widget (video_info *info, int seek)
 }
 
 static void
-diff_add_video_time (diff_dialog *dia, int seek)
+diffdia_refresh_video_pic (diff_dialog *dia)
 {
   GList *list, *cur;
   GtkWidget *avideo, *bvideo;
+  int seek, rate;
 
   list = gtk_container_get_children (GTK_CONTAINER (dia->container));
   for (cur = list; cur; cur = g_list_next (cur))
@@ -1000,18 +1001,46 @@ diff_add_video_time (diff_dialog *dia, int seek)
       gtk_container_remove (GTK_CONTAINER (dia->container), cur->data);
     }
 
+  rate = (dia->ainfo->length < dia->binfo->length ?
+	  dia->ainfo->length:
+	  dia->binfo->length) / (g_ini->compare_count + 1);
+
+  seek = dia->from_tail ?
+    dia->ainfo->length - rate * dia->index :
+    rate * dia->index;
   avideo = video2widget (dia->ainfo, seek);
   gtk_box_pack_start (GTK_BOX (dia->container), avideo, TRUE, TRUE, 0);
 
+  seek = dia->from_tail ?
+    dia->binfo->length - rate * dia->index :
+    rate * dia->index;
   bvideo = video2widget (dia->binfo, seek);
   gtk_box_pack_end (GTK_BOX (dia->container), bvideo, TRUE, TRUE, 0);
+
+  if (dia->index <= 1)
+    {
+      gtk_widget_set_sensitive (dia->butprev, FALSE);
+      gtk_widget_set_sensitive (dia->butnext, TRUE);
+    }
+  else if (dia->index >= g_ini->compare_count)
+    {
+      gtk_widget_set_sensitive (dia->butprev, TRUE);
+      gtk_widget_set_sensitive (dia->butnext, FALSE);
+    }
+  else
+    {
+      gtk_widget_set_sensitive (dia->butprev, TRUE);
+      gtk_widget_set_sensitive (dia->butnext, TRUE);
+    }
+
+  gtk_widget_show_all (dia->content);
 }
 
 static void
 diff_add_video (diff_dialog *dia, const gchar *afile, const gchar *bfile)
 {
   GtkWidget *hbox, *hbox2;
-  GtkWidget *butprev, *butnext, *entry, *label, *headortail;
+  GtkWidget *entry, *label, *headortail;
   gchar count[10];
 
   dia->ainfo = video_get_info (afile);
@@ -1032,8 +1061,6 @@ diff_add_video (diff_dialog *dia, const gchar *afile, const gchar *bfile)
   dia->container = gtk_hbox_new (TRUE, 2);
   gtk_box_pack_start (GTK_BOX (dia->content), dia->container, TRUE, TRUE, 0);
 
-  diff_add_video_time (dia, 0);
-
   /* head or tail */
   hbox = gtk_hbox_new (TRUE, 2);
   gtk_box_pack_end (GTK_BOX (dia->content), hbox, FALSE, FALSE, 5);
@@ -1045,23 +1072,26 @@ diff_add_video (diff_dialog *dia, const gchar *afile, const gchar *bfile)
 
   hbox2 = gtk_hbox_new (FALSE, 2);
   gtk_box_pack_start (GTK_BOX (hbox), hbox2, FALSE, FALSE, 2);
-  label = gtk_label_new (_ ("Count Count"));
+  label = gtk_label_new (_ ("Compare Count"));
   gtk_box_pack_start (GTK_BOX (hbox2), label, FALSE, FALSE, 2);
   entry = gtk_entry_new ();
-  g_snprintf (count, sizeof count, "%d", g_ini->compare_count);
-  gtk_entry_set_text (GTK_ENTRY (entry), count);
   gtk_box_pack_end (GTK_BOX (hbox2), entry, FALSE, FALSE, 2);
   g_signal_connect (G_OBJECT (entry), "changed",
 		    G_CALLBACK (diffdia_onseekchanged), dia);
 
-  butprev = gtk_button_new_with_label (_ ("Previous"));
-  gtk_box_pack_start (GTK_BOX (hbox), butprev, FALSE, FALSE, 2);
-  g_signal_connect (G_OBJECT (butprev), "clicked",
+  dia->butprev = gtk_button_new_with_label (_ ("Previous"));
+  gtk_box_pack_start (GTK_BOX (hbox), dia->butprev, FALSE, FALSE, 2);
+  g_signal_connect (G_OBJECT (dia->butprev), "clicked",
 		    G_CALLBACK (diffdia_onprev), dia);
-  butnext = gtk_button_new_with_label (_ ("Next"));
-  gtk_box_pack_start (GTK_BOX (hbox), butnext, FALSE, FALSE, 2);
-  g_signal_connect (G_OBJECT (butnext), "clicked",
+  dia->butnext = gtk_button_new_with_label (_ ("Next"));
+  gtk_box_pack_start (GTK_BOX (hbox), dia->butnext, FALSE, FALSE, 2);
+  g_signal_connect (G_OBJECT (dia->butnext), "clicked",
 		    G_CALLBACK (diffdia_onnext), dia);
+
+  g_snprintf (count, sizeof count, "%d", g_ini->compare_count);
+  gtk_entry_set_text (GTK_ENTRY (entry), count);
+  dia->index = 1;
+  diffdia_refresh_video_pic (dia);
 }
 
 static void
@@ -1111,7 +1141,7 @@ diff_dialog_new (gui_t *gui, const gchar *afile, const gchar *bfile)
 			      "file 2: %s\n",
 			      afile, bfile);
       label = gtk_label_new (desc);
-      g_free (label);
+      g_free (desc);
       gtk_box_pack_start (GTK_BOX (diffdia->content), label, TRUE, FALSE, 2);
     }
   gtk_widget_show_all (diffdia->content);
@@ -1122,11 +1152,15 @@ diff_dialog_new (gui_t *gui, const gchar *afile, const gchar *bfile)
 static void
 diffdia_onnext (GtkWidget *but, diff_dialog *dialog)
 {
+  dialog->index += 1;
+  diffdia_refresh_video_pic (dialog);
 }
 
 static void
 diffdia_onprev (GtkWidget *but, diff_dialog *dialog)
 {
+  dialog->index -= 1;
+  diffdia_refresh_video_pic (dialog);
 }
 
 static void
@@ -1136,11 +1170,11 @@ diffdia_ondestroy (GtkWidget *dia, GdkEvent *ev, diff_dialog *dialog)
 
   if (dialog->ainfo)
     {
-      g_free (dialog->ainfo);
+      video_info_free (dialog->ainfo);
     }
   if (dialog->binfo)
     {
-      g_free (dialog->binfo);
+      video_info_free (dialog->binfo);
     }
   g_free (dialog);
 }
@@ -1155,7 +1189,17 @@ static void
 diffdia_onseekchanged (GtkEntry *entry, diff_dialog *dia)
 {
   const gchar *text;
+  int cnt;
 
   text = gtk_entry_get_text (entry);
-  g_ini->compare_count = atoi (text);
+  cnt = atoi (text);
+  if (cnt < 1 || cnt == g_ini->compare_count)
+    {
+      return;
+    }
+
+  g_ini->compare_count = cnt;
+
+  dia->index = 1;
+  diffdia_refresh_video_pic (dia);
 }

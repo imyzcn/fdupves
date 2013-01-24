@@ -200,7 +200,7 @@ ini_save (ini_t *ini, const gchar *file)
 
   g_key_file_set_boolean (ini->keyfile, "_", "proc_image", ini->proc_image);
   g_key_file_set_boolean (ini->keyfile, "_", "proc_video", ini->proc_video);
-  g_key_file_set_boolean (ini->keyfile, "_", "compare_count", ini->compare_count);
+  g_key_file_set_integer (ini->keyfile, "_", "compare_count", ini->compare_count);
 
   data = g_key_file_to_data (ini->keyfile, &len, NULL);
   g_file_set_contents (path, data, len, NULL);
