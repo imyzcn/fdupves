@@ -31,19 +31,22 @@
 
 #include <string.h>
 
+#ifndef FD_VIDEO_COMP_CNT
+#define FD_VIDEO_COMP_CNT 2
+#endif
+
 struct st_hash
 {
   int seek;
   hash_t hash;
-  struct st_hash *next;
 };
 
 struct st_file
 {
   const char *file;
   int length;
-  struct st_hash *head_hash;
-  struct st_hash *tail_hash;
+  struct st_hash head[1];
+  struct st_hash tail[1];
 };
 
 struct st_find
@@ -54,7 +57,7 @@ struct st_find
 static void vfind_prepare (const gchar *, struct st_find *);
 static int vfind_time_hash (struct st_file *, int, int);
 static void st_file_free (struct st_file *);
-
+static gboolean is_video_same (struct st_file *, struct st_file *, gboolean);
 static GSList *append_same_slist (GSList *,
 				  const gchar *, const gchar *,
 				  same_type);
@@ -121,47 +124,53 @@ find_videos (GPtrArray *ptr)
 	      afile = g_ptr_array_index (find->ptr[g], i);
 	      bfile = g_ptr_array_index (find->ptr[g], j);
 
-	      if (afile->head_hash == NULL)
+	      if (afile->head->hash == 0)
 		{
 		  vfind_time_hash (afile,
 				   g_ini->video_timers[g][2],
 				   0);
 		}
-	      if (bfile->head_hash == NULL)
+	      if (bfile->head->hash == 0)
 		{
 		  vfind_time_hash (bfile,
 				   g_ini->video_timers[g][2],
 				   0);
 		}
-	      dist = hash_cmp (afile->head_hash->hash,
-			       bfile->head_hash->hash);
+	      dist = hash_cmp (afile->head->hash,
+			       bfile->head->hash);
 	      if (dist < g_ini->hash_distance)
 		{
-		  list = append_same_slist (list,
-					    afile->file, bfile->file,
-					    FD_SAME_VIDEO_HEAD);
-		  continue;
+		  if (is_video_same (afile, bfile, FALSE))
+		    {
+		      list = append_same_slist (list,
+						afile->file, bfile->file,
+						FD_SAME_VIDEO_HEAD);
+		      continue;
+		    }
 		}
 
-	      if (afile->tail_hash == NULL)
+	      if (afile->tail->hash == 0)
 		{
 		  vfind_time_hash (afile,
 				   afile->length - g_ini->video_timers[g][2],
 				   1);
 		}
-	      if (bfile->tail_hash == NULL)
+	      if (bfile->tail->hash == 0)
 		{
 		  vfind_time_hash (bfile,
 				   bfile->length - g_ini->video_timers[g][2],
 				   1);
 		}
-	      dist = hash_cmp (afile->tail_hash->hash,
-			       bfile->tail_hash->hash);
+	      dist = hash_cmp (afile->tail->hash,
+			       bfile->tail->hash);
 	      if (dist < g_ini->hash_distance)
 		{
-		  list = append_same_slist (list,
-					    afile->file, bfile->file,
-					    FD_SAME_VIDEO_TAIL);
+		  if (is_video_same (afile, bfile, TRUE))
+		    {
+		      list = append_same_slist (list,
+						afile->file, bfile->file,
+						FD_SAME_VIDEO_TAIL);
+		    }
 		}
 	    }
 	}
@@ -175,24 +184,6 @@ find_videos (GPtrArray *ptr)
 static void
 st_file_free (struct st_file *file)
 {
-  struct st_hash *hash;
-
-  for (hash = file->head_hash;
-       hash;
-       hash = file->head_hash)
-    {
-      file->head_hash = hash->next;
-      g_free (hash);
-    }
-
-  for (hash = file->tail_hash;
-       hash;
-       hash = file->tail_hash)
-    {
-      file->tail_hash = hash->next;
-      g_free (hash);
-    }
-
   g_free (file);
 }
 
@@ -239,23 +230,61 @@ same_list_free (GSList *list)
   g_slist_free_full (list, (GDestroyNotify) same_node_free);
 }
 
-static int
-vfind_time_hash (struct st_file *file, int seek, int tail)
+static gboolean
+is_video_same (struct st_file *afile, struct st_file *bfile, gboolean tail)
 {
-  struct st_hash *h;
+  int seeka[FD_VIDEO_COMP_CNT], seekb[FD_VIDEO_COMP_CNT];
+  int i, rate, length;
+  hash_t hasha, hashb;
 
-  h = g_malloc (sizeof (struct st_hash));
-  h->seek = seek;
-  h->hash = video_time_hash (file->file, h->seek);
   if (tail)
     {
-      h->next = file->tail_hash;
-      file->tail_hash = h;
+      length = afile->tail->seek < bfile->tail->seek ?
+	afile->tail->seek:
+	bfile->tail->seek;
+      rate =  length / (FD_VIDEO_COMP_CNT + 1);
+      for (i = 0; i < FD_VIDEO_COMP_CNT; ++ i)
+	{
+	  seeka[i] = afile->tail->seek - (i + 1) * rate;
+	  seekb[i] = bfile->tail->seek - (i + 1) * rate;
+	}
     }
   else
     {
-      h->next = file->head_hash;
-      file->head_hash = h;
+      length = afile->length < bfile->length ? afile->length: bfile->length;
+      rate = (length - afile->head->seek) / (FD_VIDEO_COMP_CNT + 1);
+      for (i = 0; i < FD_VIDEO_COMP_CNT; ++ i)
+	{
+	  seeka[i] = afile->head->seek + (i + 1) * rate;
+	  seekb[i] = bfile->head->seek + (i + 1) * rate;
+	}
+    }
+
+  for (i = 0; i < FD_VIDEO_COMP_CNT; ++ i)
+    {
+      hasha = video_time_hash (afile->file, seeka[i]);
+      hashb = video_time_hash (bfile->file, seekb[i]);
+      if (hash_cmp (hasha, hashb) >= g_ini->hash_distance)
+	{
+	  return FALSE;
+	}
+    }
+
+  return TRUE;
+}
+
+static int
+vfind_time_hash (struct st_file *file, int seek, int tail)
+{
+  if (tail)
+    {
+      file->tail->seek = seek;
+      file->tail->hash = video_time_hash (file->file, seek);
+    }
+  else
+    {
+      file->head->seek = seek;
+      file->head->hash = video_time_hash (file->file, seek);
     }
 
   return 0;

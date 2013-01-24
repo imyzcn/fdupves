@@ -52,4 +52,8 @@ gchar * fd_realpath (const gchar *);
 
 gchar * fd_install_path ();
 
+int is_image (const char *);
+
+int is_video (const gchar *);
+
 #endif

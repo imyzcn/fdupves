@@ -26,9 +26,11 @@
 /* @date Created: 2013/01/16 11:21:05 Alf*/
 
 #include "util.h"
+#include "ini.h"
 
 #include <stdlib.h>
 #include <limits.h>
+#include <string.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX        4096
@@ -88,4 +90,46 @@ fd_install_path ()
 #endif
 
   return prgdir;
+}
+
+int
+is_image (const char *path)
+{
+  int i, plen, slen;
+  const char *p, *s;
+
+  plen = strlen (path);
+  for (i = 0; g_ini->image_suffix[i][0]; ++ i)
+    {
+      s = g_ini->image_suffix[i];
+      slen = strlen (s);
+      p = (gchar *) path + plen - slen;
+      if (strcasecmp (p, s) == 0)
+	{
+	  return 1;
+	}
+    }
+
+  return 0;
+}
+
+int
+is_video (const gchar *path)
+{
+  int i, plen, slen;
+  const char *p, *s;
+
+  plen = strlen (path);
+  for (i = 0; g_ini->video_suffix[i][0]; ++ i)
+    {
+      s = g_ini->video_suffix[i];
+      slen = strlen (s);
+      p = path + plen - slen;
+      if (strcasecmp (p, s) == 0)
+	{
+	  return 1;
+	}
+    }
+
+  return 0;
 }

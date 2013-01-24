@@ -103,6 +103,7 @@ IF (UNIX)
     ".git"
     ".gitmodules"
     ".gitignore"
+    "~$"
     )
 ELSE (UNIX)
   SET (CPACK_GENERATOR NSIS)

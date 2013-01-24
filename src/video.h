@@ -30,10 +30,10 @@
 typedef struct
 {
   /* filename */
-  char *filename;
+  char *name;
 
-  /* path */
-  char *path;
+  /* dirname */
+  char *dir;
 
   /* Format */
   const char *format;

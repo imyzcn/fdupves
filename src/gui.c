@@ -27,12 +27,15 @@
 
 #include "util.h"
 #include "ini.h"
+#include "video.h"
 #include "find.h"
 #include "gui.h"
 
 #include <glib/gstdio.h>
+#include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
+#include <stdlib.h>
 
 typedef struct
 {
@@ -50,6 +53,35 @@ typedef struct
   GtkTreeSelection *resselect;
   gchar **resselfiles;
 } gui_t;
+
+typedef struct
+{
+  GtkWidget *dialog;
+
+  GtkWidget *content;
+  GtkWidget *container;
+
+  same_type type;
+
+  video_info *ainfo;
+  video_info *binfo;
+
+  gboolean from_tail;
+
+  gint count;
+
+  gint alen;
+  gint blen;
+
+  gui_t *gui;
+} diff_dialog;
+
+static void diff_dialog_new (gui_t *, const gchar *, const gchar *);
+static void diffdia_ondestroy (GtkWidget *, GdkEvent *, diff_dialog *);
+static void diffdia_onseekchanged (GtkEntry *, diff_dialog *);
+static void diffdia_onheadtail (GtkToggleButton *, diff_dialog *);
+static void diffdia_onnext (GtkWidget *, diff_dialog *);
+static void diffdia_onprev (GtkWidget *, diff_dialog *);
 
 static void toolbar_new (gui_t *);
 static void mainframe_new (gui_t *);
@@ -520,41 +552,20 @@ gui_list_dir (gui_t *gui, const gchar *path)
 static void
 gui_list_file (gui_t *gui, const gchar *path)
 {
-  size_t i, plen, slen;
-  gchar *p, *s;
+  gchar *p;
 
-  plen = strlen (path);
-
-  if (g_ini->proc_image)
+  if (g_ini->proc_image
+      && is_image (path))
     {
-      for (i = 0; g_ini->image_suffix[i][0]; ++ i)
-	{
-	  s = g_ini->image_suffix[i];
-	  slen = strlen (s);
-	  p = (gchar *) path + plen - slen;
-	  if (g_ascii_strcasecmp (p, s) == 0)
-	    {
-	      p = g_strdup (path);
-	      g_ptr_array_add (gui->images, p);
-	      break;
-	    }
-	}
+      p = g_strdup (path);
+      g_ptr_array_add (gui->images, p);
     }
 
-  if (g_ini->proc_video)
+  if (g_ini->proc_video
+      && is_video (path))
     {
-      for (i = 0; g_ini->video_suffix[i][0]; ++ i)
-	{
-	  s = g_ini->video_suffix[i];
-	  slen = strlen (s);
-	  p = (gchar *) path + plen - slen;
-	  if (g_ascii_strcasecmp (p, s) == 0)
-	    {
-	      p = g_strdup (path);
-	      g_ptr_array_add (gui->videos, p);
-	      break;
-	    }
-	}
+      p = g_strdup (path);
+      g_ptr_array_add (gui->videos, p);
     }
 }
 
@@ -745,10 +756,39 @@ restreesel_onchanged (GtkTreeSelection *sel, gui_t *gui)
 static void
 restree_open (GtkMenuItem *item, gui_t *gui)
 {
+  gchar *uri;
+  GError *err;
+
+  uri = g_filename_to_uri (gui->resselfiles[0], NULL, NULL);
+  err = NULL;
+  gtk_show_uri (NULL, uri, GDK_CURRENT_TIME, &err);
+  if (err)
+    {
+      g_error ("Open uri: %s error: %s", uri, err->message);
+    }
 }
 static void
 restree_opendir (GtkMenuItem *item, gui_t *gui)
 {
+  gchar *dir, *uri;
+  GError *err;
+
+  dir = g_path_get_dirname (gui->resselfiles[0]);
+  if (dir == NULL)
+    {
+      g_error ("get file: %s dirname failed", gui->resselfiles[0]);
+      return;
+    }
+
+  uri = g_filename_to_uri (dir, NULL, NULL);
+  g_free (dir);
+
+  err = NULL;
+  gtk_show_uri (NULL, uri, GDK_CURRENT_TIME, &err);
+  if (err)
+    {
+      g_error ("Open uri: %s error: %s", uri, err->message);
+    }
 }
 
 static void
@@ -840,7 +880,282 @@ restree_delete (GtkMenuItem *item, gui_t *gui)
 	}
     }
 }
+
+static GtkWidget *
+image2widget (const gchar *file)
+{
+  gchar *desc, *name, *dir;
+  gint width, height;
+  GtkWidget *vbox, *label, *image;
+  GdkPixbuf *pixbuf;
+  GdkPixbufFormat *format;
+  GError *err;
+
+  format = gdk_pixbuf_get_file_info (file, &width, &height);
+  if (format == NULL)
+    {
+      g_error ("get image: %s info error: %s", file, err->message);
+      return NULL;
+    }
+
+  name = g_path_get_basename (file);
+  dir = g_path_get_dirname (file);
+  desc = g_strdup_printf ("Name: %s\n"
+			  "Dir: %s\n"
+			  "size: %d:%d\n"
+			  "format: %s",
+			  name,
+			  dir,
+			  width, height,
+			  gdk_pixbuf_format_get_name (format));
+  g_free (name);
+  g_free (dir);
+
+  label = gtk_label_new (desc);
+  g_free (desc);
+
+  err = NULL;
+  pixbuf = gdk_pixbuf_new_from_file_at_scale (file,
+					      g_ini->thumb_size[0],
+					      g_ini->thumb_size[1],
+					      FALSE,
+					      &err);
+  if (err)
+    {
+      g_error ("load image: %s error: %s", file, err->message);
+      g_error_free (err);
+      g_free (desc);
+      return NULL;
+    }
+  image = gtk_image_new_from_pixbuf (pixbuf);
+
+  vbox = gtk_vbox_new (FALSE, 2);
+  gtk_box_pack_start (GTK_BOX (vbox), label, FALSE, FALSE, 2);
+  gtk_box_pack_end (GTK_BOX (vbox), image, TRUE, FALSE, 2);
+
+  return vbox;
+}
+
+static void
+diff_add_image (diff_dialog *dia, const gchar *afile, const gchar *bfile)
+{
+  GtkWidget *aimage, *bimage;
+
+  dia->container = gtk_hbox_new (TRUE, 2);
+  gtk_box_pack_start (GTK_BOX (dia->content), dia->container, TRUE, TRUE, 0);
+
+  aimage = image2widget (afile);
+  gtk_box_pack_start (GTK_BOX (dia->container), aimage, TRUE, TRUE, 0);
+
+  bimage = image2widget (bfile);
+  gtk_box_pack_end (GTK_BOX (dia->container), bimage, TRUE, TRUE, 0);
+}
+
+static GtkWidget *
+video2widget (video_info *info, int seek)
+{
+  gchar *file, *desc, *tmpfile, tmpname[0x10];
+  GtkWidget *label, *image, *vbox;
+
+  desc = g_strdup_printf ("Name: %s\n"
+			  "Dir: %s\n"
+			  "Format %s\n"
+			  "Length: %f\n"
+			  "Size: %d-%d",
+			  info->name,
+			  info->dir,
+			  info->format,
+			  info->length,
+			  info->size[0], info->size[1]);
+
+  label = gtk_label_new (desc);
+  g_free (desc);
+
+  g_snprintf (tmpname, sizeof tmpname, "%d.jpg", rand ());
+  tmpfile = g_build_filename (g_get_tmp_dir (), tmpname, NULL);
+  file = g_build_filename (info->dir, info->name, NULL);
+  video_time_screenshot_file (file, seek,
+			      g_ini->thumb_size[0], g_ini->thumb_size[1],
+			      tmpfile);
+  g_free (file);
+  image = gtk_image_new_from_file (tmpfile);
+  g_free (tmpfile);
+
+  vbox = gtk_vbox_new (FALSE, 2);
+  gtk_box_pack_start (GTK_BOX (vbox), label, FALSE, FALSE, 2);
+  gtk_box_pack_end (GTK_BOX (vbox), image, TRUE, FALSE, 2);
+
+  return vbox;
+}
+
+static void
+diff_add_video_time (diff_dialog *dia, int seek)
+{
+  GList *list, *cur;
+  GtkWidget *avideo, *bvideo;
+
+  list = gtk_container_get_children (GTK_CONTAINER (dia->container));
+  for (cur = list; cur; cur = g_list_next (cur))
+    {
+      gtk_container_remove (GTK_CONTAINER (dia->container), cur->data);
+    }
+
+  avideo = video2widget (dia->ainfo, seek);
+  gtk_box_pack_start (GTK_BOX (dia->container), avideo, TRUE, TRUE, 0);
+
+  bvideo = video2widget (dia->binfo, seek);
+  gtk_box_pack_end (GTK_BOX (dia->container), bvideo, TRUE, TRUE, 0);
+}
+
+static void
+diff_add_video (diff_dialog *dia, const gchar *afile, const gchar *bfile)
+{
+  GtkWidget *hbox, *hbox2;
+  GtkWidget *butprev, *butnext, *entry, *label, *headortail;
+  gchar count[10];
+
+  dia->ainfo = video_get_info (afile);
+  if (dia->ainfo == NULL)
+    {
+      g_error ("get video: %s info failed", afile);
+      return;
+    }
+  dia->binfo = video_get_info (bfile);
+  if (dia->binfo == NULL)
+    {
+      g_error ("get video: %s info failed", bfile);
+      video_info_free (dia->ainfo);
+      return;
+    }
+
+  /* screenshot */
+  dia->container = gtk_hbox_new (TRUE, 2);
+  gtk_box_pack_start (GTK_BOX (dia->content), dia->container, TRUE, TRUE, 0);
+
+  diff_add_video_time (dia, 0);
+
+  /* head or tail */
+  hbox = gtk_hbox_new (TRUE, 2);
+  gtk_box_pack_end (GTK_BOX (dia->content), hbox, FALSE, FALSE, 5);
+
+  headortail = gtk_toggle_button_new_with_label (_ ("From Tail"));
+  gtk_box_pack_start (GTK_BOX (hbox), headortail, FALSE, FALSE, 2);
+  g_signal_connect (G_OBJECT (headortail), "toggled",
+		    G_CALLBACK (diffdia_onheadtail), dia);
+
+  hbox2 = gtk_hbox_new (FALSE, 2);
+  gtk_box_pack_start (GTK_BOX (hbox), hbox2, FALSE, FALSE, 2);
+  label = gtk_label_new (_ ("Count Count"));
+  gtk_box_pack_start (GTK_BOX (hbox2), label, FALSE, FALSE, 2);
+  entry = gtk_entry_new ();
+  g_snprintf (count, sizeof count, "%d", g_ini->compare_count);
+  gtk_entry_set_text (GTK_ENTRY (entry), count);
+  gtk_box_pack_end (GTK_BOX (hbox2), entry, FALSE, FALSE, 2);
+  g_signal_connect (G_OBJECT (entry), "changed",
+		    G_CALLBACK (diffdia_onseekchanged), dia);
+
+  butprev = gtk_button_new_with_label (_ ("Previous"));
+  gtk_box_pack_start (GTK_BOX (hbox), butprev, FALSE, FALSE, 2);
+  g_signal_connect (G_OBJECT (butprev), "clicked",
+		    G_CALLBACK (diffdia_onprev), dia);
+  butnext = gtk_button_new_with_label (_ ("Next"));
+  gtk_box_pack_start (GTK_BOX (hbox), butnext, FALSE, FALSE, 2);
+  g_signal_connect (G_OBJECT (butnext), "clicked",
+		    G_CALLBACK (diffdia_onnext), dia);
+}
+
 static void
 restree_diff (GtkMenuItem *item, gui_t *gui)
 {
+  diff_dialog_new (gui, gui->resselfiles[0], gui->resselfiles[1]);
+}
+
+static void
+diff_dialog_new (gui_t *gui, const gchar *afile, const gchar *bfile)
+{
+  diff_dialog *diffdia;
+
+  diffdia = g_malloc0 (sizeof (diff_dialog));
+
+  diffdia->gui = gui;
+
+  diffdia->dialog = gtk_dialog_new_with_buttons ("fdupves diff dialog",
+						 GTK_WINDOW (gui->widget),
+						 GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+						 GTK_STOCK_CLOSE,
+						 GTK_RESPONSE_CLOSE,
+						 NULL);
+
+  diffdia->content = gtk_dialog_get_content_area (GTK_DIALOG (diffdia->dialog));
+
+  g_signal_connect (G_OBJECT (diffdia->dialog), "response",
+		    G_CALLBACK (diffdia_ondestroy), diffdia);
+  g_signal_connect (G_OBJECT (diffdia->dialog), "close",
+		    G_CALLBACK (diffdia_ondestroy), diffdia);
+
+  if (is_image (afile) && is_image (bfile))
+    {
+      diff_add_image (diffdia, afile, bfile);
+    }
+  else if (is_video (afile) && is_video (bfile))
+    {
+      diff_add_video (diffdia, afile, bfile);
+    }
+  else
+    {
+      gchar *desc;
+      GtkWidget *label;
+
+      desc = g_strdup_printf ("file type are not same, can't show diff\n"
+			      "file 1: %s\n"
+			      "file 2: %s\n",
+			      afile, bfile);
+      label = gtk_label_new (desc);
+      g_free (label);
+      gtk_box_pack_start (GTK_BOX (diffdia->content), label, TRUE, FALSE, 2);
+    }
+  gtk_widget_show_all (diffdia->content);
+
+  gtk_dialog_run (GTK_DIALOG (diffdia->dialog));
+}
+
+static void
+diffdia_onnext (GtkWidget *but, diff_dialog *dialog)
+{
+}
+
+static void
+diffdia_onprev (GtkWidget *but, diff_dialog *dialog)
+{
+}
+
+static void
+diffdia_ondestroy (GtkWidget *dia, GdkEvent *ev, diff_dialog *dialog)
+{
+  gtk_widget_destroy (dialog->dialog);
+
+  if (dialog->ainfo)
+    {
+      g_free (dialog->ainfo);
+    }
+  if (dialog->binfo)
+    {
+      g_free (dialog->binfo);
+    }
+  g_free (dialog);
+}
+
+static void
+diffdia_onheadtail (GtkToggleButton *but, diff_dialog *dia)
+{
+  dia->from_tail = gtk_toggle_button_get_active (but);
+}
+
+static void
+diffdia_onseekchanged (GtkEntry *entry, diff_dialog *dia)
+{
+  const gchar *text;
+
+  text = gtk_entry_get_text (entry);
+  g_ini->compare_count = atoi (text);
 }

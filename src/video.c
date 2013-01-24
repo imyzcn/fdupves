@@ -68,8 +68,8 @@ video_get_info (const char *file)
   g_message ("open %s", file);
   info = g_malloc0 (sizeof (video_info));
 
-  info->filename = g_path_get_basename (file);
-  info->path = g_strdup (file);
+  info->name = g_path_get_basename (file);
+  info->dir = g_path_get_dirname (file);
   info->length = stream->duration * stream->time_base.num / stream->time_base.den;
   info->size[0] = stream->codec->width;
   info->size[1] = stream->codec->height;
@@ -83,8 +83,8 @@ video_get_info (const char *file)
 void
 video_info_free (video_info *info)
 {
-  g_free (info->filename);
-  g_free (info->path);
+  g_free (info->name);
+  g_free (info->dir);
   g_free (info);
 }
 
