@@ -33,7 +33,6 @@
 
 #include <gtk/gtk.h>
 #include <glib/gstdio.h>
-#include <curl/curl.h>
 #include <locale.h>
 
 #if defined WIN32 && defined NDEBUG

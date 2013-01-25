@@ -227,7 +227,8 @@ same_node_free (same_node *node)
 void
 same_list_free (GSList *list)
 {
-  g_slist_free_full (list, (GDestroyNotify) same_node_free);
+  g_slist_foreach (list, (GFunc) same_node_free, NULL);
+  g_slist_free (list);
 }
 
 static gboolean

@@ -104,7 +104,7 @@ is_image (const char *path)
       s = g_ini->image_suffix[i];
       slen = strlen (s);
       p = (gchar *) path + plen - slen;
-      if (strcasecmp (p, s) == 0)
+      if (strcmp (p, s) == 0)
 	{
 	  return 1;
 	}
@@ -125,7 +125,7 @@ is_video (const gchar *path)
       s = g_ini->video_suffix[i];
       slen = strlen (s);
       p = path + plen - slen;
-      if (strcasecmp (p, s) == 0)
+      if (strcmp (p, s) == 0)
 	{
 	  return 1;
 	}
