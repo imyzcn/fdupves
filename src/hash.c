@@ -92,10 +92,10 @@ buffer_hash (const char *buffer, int size)
 static hash_t
 pixbuf_hash (GdkPixbuf *pixbuf)
 {
-  int width, height, rowstride, n_channels;
+  gsize width, height, rowstride, n_channels;
   guchar *pixels, *p;
   guint *grays, sum, avg;
-  int x, y, off;
+  gsize x, y, off;
   hash_t hash;
 
   n_channels = gdk_pixbuf_get_n_channels (pixbuf);
