@@ -48,7 +48,7 @@ video_get_info (const char *file)
       return NULL;
     }
 
-  for(i=0, s = -1; i < fmt_ctx->nb_streams; i++)
+  for(i=0, s = -1; i < (int) fmt_ctx->nb_streams; i++)
     {
       if(fmt_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
         {
@@ -65,12 +65,11 @@ video_get_info (const char *file)
 
   stream = fmt_ctx->streams[i];
 
-  g_message ("open %s", file);
   info = g_malloc0 (sizeof (video_info));
 
   info->name = g_path_get_basename (file);
   info->dir = g_path_get_dirname (file);
-  info->length = stream->duration * stream->time_base.num / stream->time_base.den;
+  info->length = (double) (stream->duration * stream->time_base.num) / stream->time_base.den;
   info->size[0] = stream->codec->width;
   info->size[1] = stream->codec->height;
   info->format = avcodec_get_name (stream->codec->codec_id);
@@ -124,7 +123,7 @@ video_time_screenshot (const char *file, int time,
     }
 
   s = -1;
-  for (i=0; i < format_ctx->nb_streams; i++)
+  for (i=0; i < (int) format_ctx->nb_streams; i++)
     {
       if(format_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
         {

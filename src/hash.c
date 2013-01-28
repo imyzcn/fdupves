@@ -95,7 +95,7 @@ pixbuf_hash (GdkPixbuf *pixbuf)
   int width, height, rowstride, n_channels;
   guchar *pixels, *p;
   guint *grays, sum, avg;
-  size_t x, y, off;
+  int x, y, off;
   hash_t hash;
 
   n_channels = gdk_pixbuf_get_n_channels (pixbuf);

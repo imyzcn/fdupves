@@ -103,7 +103,8 @@ GSList *
 find_videos (GPtrArray *ptr)
 {
   GSList *list;
-  gsize i, j, g, group_cnt, dist;
+  gsize i, j, g, group_cnt;
+  int dist;
   struct st_find find[1];
   struct st_file *afile, *bfile;
 

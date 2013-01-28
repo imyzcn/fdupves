@@ -286,7 +286,7 @@ mainframe_new (gui_t *gui)
 
   renderer = gtk_cell_renderer_text_new ();
   column = gtk_tree_view_column_new_with_attributes
-    ("Path",
+    (_ ("Path"),
      renderer, "text", 0,
      NULL);
   gtk_tree_view_column_set_resizable (column, TRUE);
@@ -320,7 +320,7 @@ mainframe_new (gui_t *gui)
 
   renderer = gtk_cell_renderer_text_new ();
   column = gtk_tree_view_column_new_with_attributes
-    ("Message",
+    (_ ("Message"),
      renderer, "text", 0,
      NULL);
   gtk_tree_view_column_set_resizable (column, TRUE);
@@ -341,7 +341,7 @@ mainframe_new (gui_t *gui)
 
   renderer = gtk_cell_renderer_text_new ();
   column = gtk_tree_view_column_new_with_attributes
-    ("Result",
+    (_ ("Result"),
      renderer, "text", 0,
      NULL);
   gtk_tree_view_column_set_resizable (column, TRUE);
@@ -417,19 +417,21 @@ gui_find_cb (GtkWidget *wid, gui_t *gui)
 			  (GtkTreeModelForeachFunc) dir_find_item,
 			  gui);
 
-  if (g_ini->proc_image)
+  if (g_ini->proc_image && gui->images->len > 0)
     {
       g_message ("find %d images to process", gui->images->len);
       listi = find_images (gui->images);
       g_slist_foreach (listi, (GFunc) gui_add_same_node, gui);
+      g_message ("find %d groups same images", g_slist_length (listi));
       same_list_free (listi);
     }
 
-  if (g_ini->proc_video)
+  if (g_ini->proc_video && gui->videos->len > 0)
     {
       g_message ("find %d videos to process", gui->videos->len);
       listv = find_videos (gui->videos);
       g_slist_foreach (listv, (GFunc) gui_add_same_node, gui);
+      g_message ("find %d groups same videos", g_slist_length (listv));
       same_list_free (listv);
     }
 
@@ -894,7 +896,7 @@ image2widget (const gchar *file)
   format = gdk_pixbuf_get_file_info (file, &width, &height);
   if (format == NULL)
     {
-      g_error ("get image: %s info error: %s", file, err->message);
+      g_error ("get image: %s info error", file);
       return NULL;
     }
 
@@ -1001,18 +1003,18 @@ diffdia_refresh_video_pic (diff_dialog *dia)
       gtk_container_remove (GTK_CONTAINER (dia->container), cur->data);
     }
 
-  rate = (dia->ainfo->length < dia->binfo->length ?
-	  dia->ainfo->length:
-	  dia->binfo->length) / (g_ini->compare_count + 1);
+  rate = (int) ((dia->ainfo->length < dia->binfo->length ?
+		 dia->ainfo->length:
+		 dia->binfo->length) / (g_ini->compare_count + 1));
 
   seek = dia->from_tail ?
-    dia->ainfo->length - rate * dia->index :
+    (int) (dia->ainfo->length - rate * dia->index) :
     rate * dia->index;
   avideo = video2widget (dia->ainfo, seek);
   gtk_box_pack_start (GTK_BOX (dia->container), avideo, TRUE, TRUE, 0);
 
   seek = dia->from_tail ?
-    dia->binfo->length - rate * dia->index :
+    (int) (dia->binfo->length - rate * dia->index) :
     rate * dia->index;
   bvideo = video2widget (dia->binfo, seek);
   gtk_box_pack_end (GTK_BOX (dia->container), bvideo, TRUE, TRUE, 0);
