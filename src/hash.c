@@ -92,10 +92,9 @@ buffer_hash (const char *buffer, int size)
 static hash_t
 pixbuf_hash (GdkPixbuf *pixbuf)
 {
-  gsize width, height, rowstride, n_channels;
+  int width, height, rowstride, n_channels;
   guchar *pixels, *p;
-  guint *grays, sum, avg;
-  gsize x, y, off;
+  int *grays, sum, avg, x, y, off;
   hash_t hash;
 
   n_channels = gdk_pixbuf_get_n_channels (pixbuf);
@@ -109,7 +108,7 @@ pixbuf_hash (GdkPixbuf *pixbuf)
   rowstride = gdk_pixbuf_get_rowstride (pixbuf);
   pixels = gdk_pixbuf_get_pixels (pixbuf);
 
-  grays = g_new0 (guint, width * height);
+  grays = g_new0 (int, width * height);
   off = 0;
   for (y = 0; y < width; ++ y)
     {
@@ -133,7 +132,7 @@ pixbuf_hash (GdkPixbuf *pixbuf)
     {
       if (grays[x] >= avg)
 	{
-	  hash |= (x << x);
+	  hash |= ((hash_t) 1 << x);
 	}
     }
 
