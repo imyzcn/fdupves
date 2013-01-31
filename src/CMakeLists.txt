@@ -19,7 +19,16 @@ SET (SOURCES
   main.c
   )
 
-ADD_EXECUTABLE (fdupves ${HEADERS} ${SOURCES} main.c)
+IF (WIN32)
+  SET (SOURCES
+    main.rc
+    ${SOURCES}
+    )
+  ADD_EXECUTABLE (fdupves WIN32 ${HEADERS} ${SOURCES} main.c)
+ELSE (WIN32)
+  ADD_EXECUTABLE (fdupves ${HEADERS} ${SOURCES} main.c)
+ENDIF (WIN32)
+
 TARGET_LINK_LIBRARIES (fdupves
   ${GTK2_LIBRARIES}
   ${FFMPEG_LIBRARIES}

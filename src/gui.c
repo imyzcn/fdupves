@@ -129,6 +129,7 @@ gboolean
 gui_init (int argc, char *argv[])
 {
   int i;
+  gchar *insdir, *iconfile;
 
   if (ini_new_with_file (FD_USR_CONF_FILE) == FALSE)
     {
@@ -137,8 +138,17 @@ gui_init (int argc, char *argv[])
 
   gui->widget = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 
-  gtk_window_set_title (GTK_WINDOW (gui->widget), "fdupves 0.0.1");
+  gtk_window_set_title (GTK_WINDOW (gui->widget), PACKAGE_STRING);
   gtk_window_set_default_size (GTK_WINDOW (gui->widget), 800, 600);
+
+  insdir = fd_install_path ();
+  if (insdir)
+    {
+      iconfile = g_build_filename (insdir, FD_SYS_ICON_DIR, PROJECT_ICON, NULL);
+      gtk_window_set_icon_from_file (GTK_WINDOW (gui->widget), iconfile, NULL);
+      g_free (iconfile);
+      g_free (insdir);
+    }
 
   g_signal_connect (G_OBJECT (gui->widget), "destroy-event", G_CALLBACK (gui_destroy_cb), gui);
   g_signal_connect (G_OBJECT (gui->widget), "delete-event", G_CALLBACK (gui_destroy_cb), gui);
