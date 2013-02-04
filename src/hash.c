@@ -48,7 +48,7 @@ file_hash (const char *file)
 					   &err);
   if (err)
     {
-      g_error ("Load file: %s to pixbuf failed: %s", file, err->message);
+      g_warning ("Load file: %s to pixbuf failed: %s", file, err->message);
       g_error_free (err);
       return 0;
     }
@@ -78,7 +78,7 @@ buffer_hash (const char *buffer, int size)
 				  &err);
   if (err)
     {
-      g_error ("Load inline data to pixbuf failed: %s", err->message);
+      g_warning ("Load inline data to pixbuf failed: %s", err->message);
       g_error_free (err);
       return 0;
     }

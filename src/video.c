@@ -145,7 +145,7 @@ video_time_screenshot (const char *file, int time,
   if (codec == NULL)
     {
       avformat_close_input (&format_ctx);
-      g_error ("Unsupported codec!");
+      g_warning ("Unsupported codec!");
       return -1;
     }
 
@@ -206,7 +206,7 @@ video_time_screenshot (const char *file, int time,
 				    PIX_FMT_RGB24, SWS_FAST_BILINEAR,
 				    NULL, NULL, NULL);
 	    if (!img_convert_ctx) {
-	      g_error ("Cannot initialize sws conversion context");
+	      g_warning ("Cannot initialize sws conversion context");
 	      av_free_packet(&packet);
 	      avcodec_free_frame (&frame);
 	      avcodec_free_frame (&frame_rgb);
@@ -273,7 +273,7 @@ video_time_screenshot_file (const char *file, int time,
       if (err)
 	{
 	  g_free (buf);
-	  g_error ("%s: %s", file, err->message);
+	  g_warning ("%s: %s", file, err->message);
 	  g_error_free (err);
 	  return -1;
 	}

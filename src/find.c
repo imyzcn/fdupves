@@ -197,7 +197,7 @@ vfind_prepare (const gchar *file, struct st_find *find)
   length = video_get_length (file);
   if (length <= 0)
     {
-      g_error ("Can't get duration of %s", file);
+      g_warning ("Can't get duration of %s", file);
       return;
     }
 

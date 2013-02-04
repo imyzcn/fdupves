@@ -38,6 +38,8 @@
 #if defined WIN32 && defined NDEBUG
 #pragma comment (linker, "/subsystem:windows")
 #pragma comment (linker, "/ENTRY:mainCRTStartup")
+#else
+#pragma comment (linker, "/subsystem:console")
 #endif
 
 #ifdef FDUPVES_ENABLE_PROFILER

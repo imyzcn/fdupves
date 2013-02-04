@@ -36,6 +36,9 @@
 #include <gtk/gtk.h>
 #include <string.h>
 #include <stdlib.h>
+#ifdef WIN32
+#include <windows.h>
+#endif
 
 typedef struct
 {
@@ -527,7 +530,7 @@ gui_list_dir (gui_t *gui, const gchar *path)
       gdir = g_dir_open (dir, 0, &err);
       if (err)
 	{
-	  g_error ("Can't open dir: %s: %s", dir, err->message);
+	  g_warning ("Can't open dir: %s: %s", dir, err->message);
 	  g_error_free (err);
 	}
 
@@ -776,9 +779,16 @@ restree_open (GtkMenuItem *item, gui_t *gui)
   gtk_show_uri (NULL, uri, GDK_CURRENT_TIME, &err);
   if (err)
     {
-      g_error ("Open uri: %s error: %s", uri, err->message);
+      g_debug ("Open uri: %s error: %s", uri, err->message);
+      g_error_free (err);
     }
+  g_free (uri);
+
+#ifdef WIN32
+  ShellExecute (NULL, "open", gui->resselfiles[0], NULL, NULL, SW_SHOW);
+#endif
 }
+
 static void
 restree_opendir (GtkMenuItem *item, gui_t *gui)
 {
@@ -788,19 +798,25 @@ restree_opendir (GtkMenuItem *item, gui_t *gui)
   dir = g_path_get_dirname (gui->resselfiles[0]);
   if (dir == NULL)
     {
-      g_error ("get file: %s dirname failed", gui->resselfiles[0]);
+      g_warning ("get file: %s dirname failed", gui->resselfiles[0]);
       return;
     }
 
   uri = g_filename_to_uri (dir, NULL, NULL);
-  g_free (dir);
 
   err = NULL;
   gtk_show_uri (NULL, uri, GDK_CURRENT_TIME, &err);
   if (err)
     {
-      g_error ("Open uri: %s error: %s", uri, err->message);
+      g_debug ("Open uri: %s error: %s", uri, err->message);
+      g_error_free (err);
     }
+  g_free (uri);
+
+#ifdef WIN32
+  ShellExecute (NULL, "open", dir, NULL, NULL, SW_SHOW);
+#endif
+  g_free (dir);
 }
 
 static void
@@ -906,7 +922,7 @@ image2widget (const gchar *file)
   format = gdk_pixbuf_get_file_info (file, &width, &height);
   if (format == NULL)
     {
-      g_error ("get image: %s info error", file);
+      g_warning ("get image: %s info error", file);
       return NULL;
     }
 
@@ -934,7 +950,7 @@ image2widget (const gchar *file)
 					      &err);
   if (err)
     {
-      g_error ("load image: %s error: %s", file, err->message);
+      g_warning ("load image: %s error: %s", file, err->message);
       g_error_free (err);
       g_free (desc);
       return NULL;
@@ -1058,13 +1074,13 @@ diff_add_video (diff_dialog *dia, const gchar *afile, const gchar *bfile)
   dia->ainfo = video_get_info (afile);
   if (dia->ainfo == NULL)
     {
-      g_error ("get video: %s info failed", afile);
+      g_warning ("get video: %s info failed", afile);
       return;
     }
   dia->binfo = video_get_info (bfile);
   if (dia->binfo == NULL)
     {
-      g_error ("get video: %s info failed", bfile);
+      g_warning ("get video: %s info failed", bfile);
       video_info_free (dia->ainfo);
       return;
     }
