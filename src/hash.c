@@ -171,7 +171,6 @@ hash_cmp (hash_t a, hash_t b)
 	{
 	  ++ cmp;
 	}
-      c = c >> 1;
     }
 
   return cmp;
