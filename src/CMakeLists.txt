@@ -20,8 +20,13 @@ SET (SOURCES
   )
 
 IF (WIN32)
+  SET (HEADERS
+    image-win.h
+    ${HEADERS}
+    )
   SET (SOURCES
     main.rc
+    image-win.c
     ${SOURCES}
     )
   ADD_EXECUTABLE (fdupves WIN32 ${HEADERS} ${SOURCES} main.c)

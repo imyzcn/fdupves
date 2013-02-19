@@ -35,11 +35,13 @@
 #include <glib/gstdio.h>
 #include <locale.h>
 
-#if defined WIN32 && defined NDEBUG
-#pragma comment (linker, "/subsystem:windows")
-#pragma comment (linker, "/ENTRY:mainCRTStartup")
-#else
-#pragma comment (linker, "/subsystem:console")
+#ifdef WIN32
+# ifdef NDEBUG
+#  pragma comment (linker, "/subsystem:windows")
+#  pragma comment (linker, "/ENTRY:mainCRTStartup")
+# else
+#  pragma comment (linker, "/subsystem:console")
+# endif
 #endif
 
 #ifdef FDUPVES_ENABLE_PROFILER

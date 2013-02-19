@@ -542,7 +542,7 @@ gui_list_dir (gui_t *gui, const gchar *path)
 	      continue;
 	    }
 
-	  curpath = g_strdup_printf ("%s/%s", dir, cur);
+	  curpath = g_build_filename (dir, cur, NULL);
 	  if (g_file_test (curpath, G_FILE_TEST_IS_DIR))
 	    {
 	      g_queue_push_tail (stack, curpath);

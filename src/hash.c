@@ -28,6 +28,9 @@
 #include "video.h"
 #include "ini.h"
 
+#ifdef WIN32
+#include "image-win.h"
+#endif
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
 
@@ -37,15 +40,24 @@ hash_t
 file_hash (const char *file)
 {
   GdkPixbuf *buf;
-  GError *err;
   hash_t h;
+  GError *err;
 
   err = NULL;
+#ifndef WIN32
   buf = gdk_pixbuf_new_from_file_at_scale (file,
 					   g_ini->hash_size[0],
 					   g_ini->hash_size[1],
 					   FALSE,
 					   &err);
+#else
+  buf = gdk_pixbuf_new_from_file_at_scale_wic (file,
+					       g_ini->hash_size[0],
+					       g_ini->hash_size[1],
+					       FALSE,
+					       &err);
+#endif
+
   if (err)
     {
       g_warning ("Load file: %s to pixbuf failed: %s", file, err->message);
