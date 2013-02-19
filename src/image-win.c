@@ -47,7 +47,6 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
 				       GError **pe)
 {
   GdkPixbuf *pixbuf;
-  gchar *lfilename;
   char buffer[0x1000];
   wchar_t wfilename[PATH_MAX];
   HRESULT hr;
@@ -70,20 +69,7 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
       return NULL;
     }
 
-  lfilename = g_locale_from_utf8 (filename, -1, NULL, NULL, NULL);
-  if (lfilename == NULL)
-    {
-      lfilename = g_strdup (filename);
-    }
-
-  if (lfilename == NULL)
-    {
-      g_debug ("Get filename failed: %s", filename);
-      return NULL;
-    }
-
-  mbstowcs (wfilename, lfilename, PATH_MAX);
-  g_free (lfilename);
+  MultiByteToWideChar (CP_UTF8, 0, filename, -1, wfilename, sizeof wfilename);
 
   hr = IWICImagingFactory_CreateDecoderFromFilename(
 						    m_pIWICFactory,
@@ -163,10 +149,6 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
 				     width * 4,
 				     NULL,
 				     pe);
-  if (pe && *pe)
-    {
-      g_warning ("Create pixbuf failed: %s", (*pe)->message);
-    }
 
   return pixbuf;
 }
