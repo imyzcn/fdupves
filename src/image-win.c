@@ -85,6 +85,7 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
 	{
 	  *pe = g_error_new (0, 0, "Create Decoder failed");
 	}
+      IWICImagingFactory_Release (m_pIWICFactory);
       return NULL;
     }
 
@@ -97,6 +98,10 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
 	{
 	  *pe = g_error_new (0, 0, "Retrieve frame failed");
 	}
+
+      IWICBitmapDecoder_Release (pIDecoder);
+      IWICImagingFactory_Release (m_pIWICFactory);
+
       return NULL;
     }
 
@@ -109,6 +114,11 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
 	{
 	  *pe = g_error_new (0, 0, "Create scaler failed");
 	}
+
+      IWICBitmapFrameDecode_Release (pIDecoderFrame);
+      IWICBitmapDecoder_Release (pIDecoder);
+      IWICImagingFactory_Release (m_pIWICFactory);
+
       return NULL;
     }
 
@@ -125,6 +135,12 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
 	{
 	  *pe = g_error_new (0, 0, "Scale failed");
 	}
+
+      IWICBitmapScaler_Release (pIScaler);
+      IWICBitmapFrameDecode_Release (pIDecoderFrame);
+      IWICBitmapDecoder_Release (pIDecoder);
+      IWICImagingFactory_Release (m_pIWICFactory);
+
       return NULL;
     }
 
@@ -149,6 +165,11 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
 				     width * 4,
 				     NULL,
 				     pe);
+
+  IWICBitmapScaler_Release (pIScaler);
+  IWICBitmapFrameDecode_Release (pIDecoderFrame);
+  IWICBitmapDecoder_Release (pIDecoder);
+  IWICImagingFactory_Release (m_pIWICFactory);
 
   return pixbuf;
 }
