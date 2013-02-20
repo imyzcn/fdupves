@@ -45,6 +45,9 @@ typedef struct
   GtkWidget *widget;
   GtkWidget *mainvbox;
 
+  GtkToolItem *but_add;
+  GtkToolItem *but_find;
+
   GtkListStore *dirlist;
 
   GPtrArray *images;
@@ -101,6 +104,8 @@ static void gui_destroy_cb (GtkWidget *, GdkEvent *, gui_t *);
 static void gui_add_dir (gui_t *, const gchar *);
 static void gui_add_same_node (same_node *node, gui_t *);
 
+static void gui_find_thread (gui_t *);
+
 static gboolean dir_find_item (GtkTreeModel *,
 			       GtkTreePath *,
 			       GtkTreeIter *,
@@ -127,6 +132,10 @@ static void restree_open (GtkMenuItem *, gui_t *);
 static void restree_opendir (GtkMenuItem *, gui_t *);
 static void restree_delete (GtkMenuItem *, gui_t *);
 static void restree_diff (GtkMenuItem *, gui_t *);
+
+#ifndef FDUPVES_THREAD_STACK_SIZE
+#define FDUPVES_THREAD_STACK_SIZE (1024 * 1024 * 10)
+#endif
 
 gboolean
 gui_init (int argc, char *argv[])
@@ -215,21 +224,30 @@ toolbar_new (gui_t *gui)
   gtk_box_pack_start (GTK_BOX (gui->mainvbox), toolbar, FALSE, FALSE, 2);
 
   img = fd_toolbar_icon_new ("add.png");
-  but = gtk_tool_button_new (img, _ ("Add"));
-  gtk_widget_set_tooltip_text (GTK_WIDGET (but), _ ("Add Source Files"));
-  g_signal_connect (G_OBJECT (but), "clicked", G_CALLBACK (gui_add_cb), gui);
-  gtk_toolbar_insert (GTK_TOOLBAR (toolbar), but, -1);
+  gui->but_add = gtk_tool_button_new (img, _ ("Add"));
+  gtk_widget_set_tooltip_text (GTK_WIDGET (gui->but_add),
+			       _ ("Add Source Files"));
+  g_signal_connect (G_OBJECT (gui->but_add),
+		    "clicked",
+		    G_CALLBACK (gui_add_cb), gui);
+  gtk_toolbar_insert (GTK_TOOLBAR (toolbar), gui->but_add, -1);
 
   img = fd_toolbar_icon_new ("find.png");
-  but = gtk_tool_button_new (img, _ ("Find"));
-  gtk_widget_set_tooltip_text (GTK_WIDGET (but), _ ("Find Duplicate Files"));
-  g_signal_connect (G_OBJECT (but), "clicked", G_CALLBACK (gui_find_cb), gui);
-  gtk_toolbar_insert (GTK_TOOLBAR (toolbar), but, -1);
+  gui->but_find = gtk_tool_button_new (img, _ ("Find"));
+  gtk_widget_set_tooltip_text (GTK_WIDGET (gui->but_find),
+			       _ ("Find Duplicate Files"));
+  g_signal_connect (G_OBJECT (gui->but_find),
+		    "clicked",
+		    G_CALLBACK (gui_find_cb), gui);
+  gtk_toolbar_insert (GTK_TOOLBAR (toolbar), gui->but_find, -1);
 
   img = fd_toolbar_icon_new ("pref.png");
   but = gtk_tool_button_new (img, _ ("Preference"));
-  gtk_widget_set_tooltip_text (GTK_WIDGET (but), _ ("Preference"));
-  g_signal_connect (G_OBJECT (but), "clicked", G_CALLBACK (gui_pref_cb), gui);
+  gtk_widget_set_tooltip_text (GTK_WIDGET (but),
+			       _ ("Preference"));
+  g_signal_connect (G_OBJECT (but),
+		    "clicked",
+		    G_CALLBACK (gui_pref_cb), gui);
   gtk_toolbar_insert (GTK_TOOLBAR (toolbar), but, -1);
 
   img = fd_toolbar_icon_new ("help.png");
@@ -421,7 +439,26 @@ gui_add_cb (GtkWidget *wid, gui_t *gui)
 static void
 gui_find_cb (GtkWidget *wid, gui_t *gui)
 {
+  g_thread_create_full ((GThreadFunc) gui_find_thread,
+			gui,
+			FDUPVES_THREAD_STACK_SIZE,
+			FALSE,
+			FALSE,
+			0,
+			NULL);
+}
+
+static void
+gui_find_thread (gui_t *gui)
+{
   GSList *listi, *listv;
+
+  /* disable the add/find tool time */
+  gdk_threads_enter ();
+  gtk_widget_set_sensitive (GTK_WIDGET (gui->but_add), FALSE);
+  gtk_widget_set_sensitive (GTK_WIDGET (gui->but_find), FALSE);
+  gdk_threads_leave ();
+
   gui->images = g_ptr_array_new_with_free_func (g_free);
   gui->videos = g_ptr_array_new_with_free_func (g_free);
   gtk_tree_store_clear (gui->restree);
@@ -432,24 +469,34 @@ gui_find_cb (GtkWidget *wid, gui_t *gui)
 
   if (g_ini->proc_image && gui->images->len > 0)
     {
-      g_message ("find %d images to process", gui->images->len);
+      g_message (_ ("find %d images to process"), gui->images->len);
       listi = find_images (gui->images);
+      gdk_threads_enter ();
       g_slist_foreach (listi, (GFunc) gui_add_same_node, gui);
-      g_message ("find %d groups same images", g_slist_length (listi));
+      gdk_threads_leave ();
+      g_message (_ ("find %d groups same images"), g_slist_length (listi));
       same_list_free (listi);
     }
 
   if (g_ini->proc_video && gui->videos->len > 0)
     {
-      g_message ("find %d videos to process", gui->videos->len);
+      g_message (_ ("find %d videos to process"), gui->videos->len);
       listv = find_videos (gui->videos);
+      gdk_threads_enter ();
       g_slist_foreach (listv, (GFunc) gui_add_same_node, gui);
-      g_message ("find %d groups same videos", g_slist_length (listv));
+      gdk_threads_leave ();
+      g_message (_ ("find %d groups same videos"), g_slist_length (listv));
       same_list_free (listv);
     }
 
   g_ptr_array_free (gui->images, TRUE);
   g_ptr_array_free (gui->videos, TRUE);
+
+  /* disable the add/find tool time */
+  gdk_threads_enter ();
+  gtk_widget_set_sensitive (GTK_WIDGET (gui->but_add), TRUE);
+  gtk_widget_set_sensitive (GTK_WIDGET (gui->but_find), TRUE);
+  gdk_threads_leave ();
 }
 
 static void

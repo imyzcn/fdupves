@@ -36,12 +36,16 @@
 #include <locale.h>
 
 #ifdef WIN32
+
+#include <ObjBase.h>
+
 # ifdef NDEBUG
 #  pragma comment (linker, "/subsystem:windows")
 #  pragma comment (linker, "/ENTRY:mainCRTStartup")
 # else
 #  pragma comment (linker, "/subsystem:console")
 # endif
+
 #endif
 
 #ifdef FDUPVES_ENABLE_PROFILER
@@ -76,10 +80,22 @@ main (int argc, char *argv[])
   /* av format init */
   av_register_all ();
 
+#ifdef WIN32
+  /* com init */
+  CoInitializeEx (NULL, COINIT_MULTITHREADED);
+#endif
+
+  if (!g_thread_supported ())
+    {
+      g_thread_init (NULL);
+    }
+  gdk_threads_init ();
+
   gtk_init (&argc, &argv);
 
   gui_init (argc, argv);
 
+  gdk_threads_enter ();
 #ifdef FDUPVES_ENABLE_PROFILER
   ProfilerStart ("fdupves.prof");
 #endif
@@ -87,6 +103,7 @@ main (int argc, char *argv[])
 #ifdef FDUPVES_ENABLE_PROFILER
   ProfilerStop ();
 #endif
+  gdk_threads_leave ();
 
   return 0;
 }

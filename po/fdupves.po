@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: acnchess 0.0.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2013-01-28 17:28+0800\n"
+"POT-Creation-Date: 2013-02-20 16:23+0800\n"
 "PO-Revision-Date: 2011-09-05 11:12+0800\n"
 "Last-Translator: Alf <naihe2010@126.com>\n"
 "Language-Team: Alf <naihe2010@126.com>\n"
@@ -16,99 +16,119 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: /home/pengda/personal/fdupves/src/gui.c:205
+#: /home/pengda/personal/project/fdupves/src/gui.c:227
 msgid "Add"
 msgstr "添加"
 
-#: /home/pengda/personal/fdupves/src/gui.c:206
+#: /home/pengda/personal/project/fdupves/src/gui.c:229
 msgid "Add Source Files"
 msgstr "加入源文件"
 
-#: /home/pengda/personal/fdupves/src/gui.c:211
+#: /home/pengda/personal/project/fdupves/src/gui.c:236
 msgid "Find"
 msgstr "查找"
 
-#: /home/pengda/personal/fdupves/src/gui.c:212
+#: /home/pengda/personal/project/fdupves/src/gui.c:238
 msgid "Find Duplicate Files"
 msgstr "查找重复文件"
 
-#: /home/pengda/personal/fdupves/src/gui.c:217
-#: /home/pengda/personal/fdupves/src/gui.c:218
+#: /home/pengda/personal/project/fdupves/src/gui.c:245
+#: /home/pengda/personal/project/fdupves/src/gui.c:247
 msgid "Preference"
 msgstr "首选项"
 
-#: /home/pengda/personal/fdupves/src/gui.c:223
+#: /home/pengda/personal/project/fdupves/src/gui.c:254
 msgid "Help"
 msgstr "帮助"
 
-#: /home/pengda/personal/fdupves/src/gui.c:224
+#: /home/pengda/personal/project/fdupves/src/gui.c:255
 msgid "Help infomations"
 msgstr "帮助信息"
 
-#: /home/pengda/personal/fdupves/src/gui.c:289
+#: /home/pengda/personal/project/fdupves/src/gui.c:320
 msgid "Path"
 msgstr "源目录"
 
-#: /home/pengda/personal/fdupves/src/gui.c:300
+#: /home/pengda/personal/project/fdupves/src/gui.c:331
 msgid "Image"
 msgstr "图片"
 
-#: /home/pengda/personal/fdupves/src/gui.c:305
+#: /home/pengda/personal/project/fdupves/src/gui.c:336
 msgid "Video"
 msgstr "视频"
 
-#: /home/pengda/personal/fdupves/src/gui.c:323
+#: /home/pengda/personal/project/fdupves/src/gui.c:354
 msgid "Message"
 msgstr "消息"
 
-#: /home/pengda/personal/fdupves/src/gui.c:344
+#: /home/pengda/personal/project/fdupves/src/gui.c:375
 msgid "Result"
 msgstr "结果"
 
-#: /home/pengda/personal/fdupves/src/gui.c:383
+#: /home/pengda/personal/project/fdupves/src/gui.c:414
 msgid "Choose Folder"
 msgstr "选择目录"
 
-#: /home/pengda/personal/fdupves/src/gui.c:589
+#: /home/pengda/personal/project/fdupves/src/gui.c:472
+#, c-format
+msgid "find %d images to process"
+msgstr "找到%d张图片要处理"
+
+#: /home/pengda/personal/project/fdupves/src/gui.c:477
+#, c-format
+msgid "find %d groups same images"
+msgstr "找到%d组相同/相似图片"
+
+#: /home/pengda/personal/project/fdupves/src/gui.c:483
+#, c-format
+msgid "find %d videos to process"
+msgstr "找到%d个视频要处理"
+
+#: /home/pengda/personal/project/fdupves/src/gui.c:488
+#, c-format
+msgid "find %d groups same videos"
+msgstr "找到%d组相同/相似视频"
+
+#: /home/pengda/personal/project/fdupves/src/gui.c:649
 msgid "Are you sure you want to quit fdupves? "
 msgstr "你确定要退出fdupves？"
 
-#: /home/pengda/personal/fdupves/src/gui.c:671
+#: /home/pengda/personal/project/fdupves/src/gui.c:731
 msgid "process file"
 msgstr "处理文件"
 
-#: /home/pengda/personal/fdupves/src/gui.c:684
+#: /home/pengda/personal/project/fdupves/src/gui.c:744
 msgid "open"
 msgstr "打开"
 
-#: /home/pengda/personal/fdupves/src/gui.c:695
+#: /home/pengda/personal/project/fdupves/src/gui.c:755
 msgid "open dir"
 msgstr "打开目录"
 
-#: /home/pengda/personal/fdupves/src/gui.c:706
+#: /home/pengda/personal/project/fdupves/src/gui.c:766
 msgid "delete"
 msgstr "删除"
 
-#: /home/pengda/personal/fdupves/src/gui.c:717
+#: /home/pengda/personal/project/fdupves/src/gui.c:777
 msgid "diff"
 msgstr "比较"
 
-#: /home/pengda/personal/fdupves/src/gui.c:861
+#: /home/pengda/personal/project/fdupves/src/gui.c:934
 msgid "Are you sure you want to delete these files? "
 msgstr "你确定要删除这些文件？"
 
-#: /home/pengda/personal/fdupves/src/gui.c:1070
+#: /home/pengda/personal/project/fdupves/src/gui.c:1143
 msgid "From Tail"
 msgstr "从尾开始"
 
-#: /home/pengda/personal/fdupves/src/gui.c:1077
+#: /home/pengda/personal/project/fdupves/src/gui.c:1150
 msgid "Compare Count"
 msgstr "比较次数"
 
-#: /home/pengda/personal/fdupves/src/gui.c:1084
+#: /home/pengda/personal/project/fdupves/src/gui.c:1157
 msgid "Previous"
 msgstr "向前"
 
-#: /home/pengda/personal/fdupves/src/gui.c:1088
+#: /home/pengda/personal/project/fdupves/src/gui.c:1161
 msgid "Next"
 msgstr "向后"

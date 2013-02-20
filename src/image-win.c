@@ -63,9 +63,13 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
 			CLSCTX_INPROC_SERVER,
 			&IID_IWICImagingFactory,
 			(LPVOID*) &m_pIWICFactory);
-  if (hr != S_OK)
+  if (!SUCCEEDED(hr))
     {
-      g_debug ("Create WIC factory failed");
+      if (pe)
+	{
+	  *pe = g_error_new (g_quark_from_string ("Warning"), hr, "Create WICImagingFactory failed: %x: %s", hr, strerror (hr));
+	}
+
       return NULL;
     }
 
@@ -83,7 +87,7 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
     {
       if (pe)
 	{
-	  *pe = g_error_new (0, 0, "Create Decoder failed");
+	  *pe = g_error_new (g_quark_from_string ("Warning"), hr, "Create Decoder failed");
 	}
       IWICImagingFactory_Release (m_pIWICFactory);
       return NULL;
@@ -96,7 +100,7 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
     {
       if (pe)
 	{
-	  *pe = g_error_new (0, 0, "Retrieve frame failed");
+	  *pe = g_error_new (g_quark_from_string ("Warning"), hr, "Retrieve frame failed");
 	}
 
       IWICBitmapDecoder_Release (pIDecoder);
@@ -112,7 +116,7 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
     {
       if (pe)
 	{
-	  *pe = g_error_new (0, 0, "Create scaler failed");
+	  *pe = g_error_new (g_quark_from_string ("Warning"), hr, "Create scaler failed");
 	}
 
       IWICBitmapFrameDecode_Release (pIDecoderFrame);
@@ -133,7 +137,7 @@ gdk_pixbuf_new_from_file_at_scale_wic (const gchar *filename,
     {
       if (pe)
 	{
-	  *pe = g_error_new (0, 0, "Scale failed");
+	  *pe = g_error_new (g_quark_from_string ("Warning"), hr, "Scale failed");
 	}
 
       IWICBitmapScaler_Release (pIScaler);
