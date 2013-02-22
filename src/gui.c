@@ -121,6 +121,10 @@ static void dirlist_onactivated (GtkTreeView *,
 static gboolean restree_onbutpress (GtkWidget *,
 				    GdkEventButton *,
 				    gui_t *);
+static void restree_onactivated (GtkTreeView *,
+				 GtkTreePath *,
+				 GtkTreeViewColumn *,
+				 gui_t *);
 static void restreesel_onchanged (GtkTreeSelection *, gui_t *);
 
 static GtkWidget *restree_open_menuitem (gui_t *);
@@ -381,6 +385,8 @@ mainframe_new (gui_t *gui)
   gtk_widget_add_events (GTK_WIDGET (tree), GDK_BUTTON_PRESS_MASK);
   g_signal_connect (G_OBJECT (tree), "button-press-event",
 		    G_CALLBACK (restree_onbutpress), gui);
+  g_signal_connect (G_OBJECT (tree), "row-activated",
+		    G_CALLBACK (restree_onactivated), gui);
   gui->resselect = gtk_tree_view_get_selection (GTK_TREE_VIEW (tree));
   gtk_tree_selection_set_mode (gui->resselect, GTK_SELECTION_MULTIPLE);
   g_signal_connect (G_OBJECT (gui->resselect), "changed",
@@ -719,6 +725,15 @@ dirlist_onactivated (GtkTreeView *tree,
     {
       gtk_list_store_remove (gui->dirlist, itr);
     }
+}
+
+static void
+restree_onactivated (GtkTreeView *tree,
+		     GtkTreePath *path,
+		     GtkTreeViewColumn *column,
+		     gui_t *gui)
+{
+  restree_open (NULL, gui);
 }
 
 static gboolean

@@ -4,7 +4,7 @@ PROJECT (fdupves "C")
 
 SET (PROJECT_MAJOR      "Klara")
 SET (PROJECT_MINOR      "0")
-SET (PROJECT_PATCH      "2")
+SET (PROJECT_PATCH      "3")
 SET (PROJECT_ICON       "wowgirls-klara.jpg")
 
 ADD_DEFINITIONS (
@@ -88,6 +88,8 @@ INSTALL (FILES
   DESTINATION etc)
 INSTALL (FILES
   fdupves.html
+  COPYING THANKS AUTHORS
+  TODO INSTALL NEWS
   DESTINATION share/fdupves)
 IF (WIN32)
   INSTALL (DIRECTORY ${FFMPEG_DIR}/licenses

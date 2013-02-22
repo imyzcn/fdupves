@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
-               "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+          "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
-<head>
-<title>查找重复视频文件的小工具：fdupves</title>
-<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
-<meta name="title" content="查找重复视频文件的小工具：fdupves"/>
-<meta name="generator" content="Org-mode"/>
-<meta name="generated" content="2013-02-22 09:34:10 CST"/>
-<meta name="author" content="Alf"/>
-<meta name="description" content=""/>
-<meta name="keywords" content=""/>
-<style type="text/css">
- <!--/*--><![CDATA[/*><!--*/
+  <head>
+    <title>查找重复视频文件的小工具：fdupves</title>
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+    <meta name="title" content="查找重复视频文件的小工具：fdupves"/>
+    <meta name="generator" content="Org-mode"/>
+    <meta name="generated" content="2013-02-22 09:34:10 CST"/>
+    <meta name="author" content="Alf"/>
+    <meta name="description" content=""/>
+    <meta name="keywords" content=""/>
+    <style type="text/css">
+      <!--/*--><![CDATA[/*><!--*/
   html { font-family: Times, serif; font-size: 12pt; }
   .title  { text-align: center; }
   .todo   { color: red; }
@@ -59,19 +59,19 @@
   .org-info-js_search-highlight {background-color:#ffff00; color:#000000;
                                  font-weight:bold; }
   /*]]>*/-->
-</style><style type="text/css">
-body {background-color: #F8F4E7; color: #552800;}
-a.link {color:#0000A0;}
-a.visited {color: #A000A0;}
-a.active {color: #00A000;}
-img.thumb {height: 100px; width: 100px;}
-img.big {height: 900px; width: 900px;}
-img:w.xref {vertical-align: middle; padding-left:6px; padding-right:10px;}
-div.header {position:absolute; left:10px; top:0px;}
-h1.title {position:relative; top:20px}
-</style>
-<script type="text/javascript">
-<!--/*--><![CDATA[/*><!--*/
+    </style><style type="text/css">
+      body {background-color: #F8F4E7; color: #552800;}
+      a.link {color:#0000A0;}
+      a.visited {color: #A000A0;}
+      a.active {color: #00A000;}
+      img.thumb {height: 100px; width: 100px;}
+      img.big {height: 900px; width: 900px;}
+      img:w.xref {vertical-align: middle; padding-left:6px; padding-right:10px;}
+      div.header {position:absolute; left:10px; top:0px;}
+      h1.title {position:relative; top:20px}
+    </style>
+    <script type="text/javascript">
+      <!--/*--><![CDATA[/*><!--*/
  function CodeHighlightOn(elem, id)
  {
    var target = document.getElementById(id);
@@ -91,230 +91,219 @@ h1.title {position:relative; top:20px}
      target.className = elem.cacheClassTarget;
  }
 /*]]>*///-->
-</script>
+    </script>
 
-</head>
-<body>
+  </head>
+  <body>
 
-<div id="preamble">
+    <div id="preamble">
 
-</div>
+    </div>
 
-<div id="content">
-<h1 class="title">查找重复视频文件的小工具：fdupves</h1>
+    <div id="content">
+      <h1 class="title">查找重复视频文件的小工具：fdupves</h1>
 
 
-<div id="outline-container-1" class="outline-2">
-<h2 id="sec-1">写在前面</h2>
-<div class="outline-text-2" id="text-1">
+      <div id="outline-container-1" class="outline-2">
+	<h2 id="sec-1">写在前面</h2>
+	<div class="outline-text-2" id="text-1">
 
 
-<p>
-对于很多电影文件收藏者来说，经常收到一些内容重复的片子。
-</p>
-<ol>
-<li>比如，同一个电影，自己目录里面有，但是由于下载的时候名字不一样，而导致了重复下载与重复收藏，占据了不必要的空间。
+	  <p>
+	    对于很多电影文件收藏者来说，经常收到一些内容重复的片子。
+	  </p>
+	  <ol>
+	    <li>比如，同一个电影，自己目录里面有，但是由于下载的时候名字不一样，而导致了重复下载与重复收藏，占据了不必要的空间。
 
-</li>
-<li>再比如，同一个电影，自己目录里面有，但是编码不一样，比如有的是AVI的，有的是RMVB的，或者还有MP4的，这些其实都是一个片子，这也占据了我们不必要的空间。
-</li>
-</ol>
+	    </li>
+	    <li>再比如，同一个电影，自己目录里面有，但是编码不一样，比如有的是AVI的，有的是RMVB的，或者还有MP4的，这些其实都是一个片子，这也占据了我们不必要的空间。
+	    </li>
+	  </ol>
 
 
-<p>
-于是，我利用一些业余时间，写了这个小工具：<a href="http://github.com/naihe2010/fdupves/">fdupves</a>。
-</p>
-</div>
+	  <p>
+	    于是，我利用一些业余时间，写了这个小工具：<a href="http://github.com/naihe2010/fdupves/">fdupves</a>。
+	  </p>
+	</div>
 
-</div>
+      </div>
 
-<div id="outline-container-2" class="outline-2">
-<h2 id="sec-2">下载</h2>
-<div class="outline-text-2" id="text-2">
+      <div id="outline-container-2" class="outline-2">
+	<h2 id="sec-2">下载</h2>
+	<div class="outline-text-2" id="text-2">
 
 
 
-</div>
+	</div>
 
-<div id="outline-container-2-1" class="outline-3">
-<h3 id="sec-2-1">Source</h3>
-<div class="outline-text-3" id="text-2-1">
+	<div id="outline-container-2-1" class="outline-3">
+	  <h3 id="sec-2-1">Source</h3>
+	  <div class="outline-text-3" id="text-2-1">
 
-<ul>
-<li><a href="http://github.com/naihe2010/fdupves/">fdupves at Github.com</a>
-</li>
-</ul>
+	    <ul>
+	      <li><a href="http://github.com/naihe2010/fdupves/">fdupves at Github.com</a>
+	      </li>
+	    </ul>
 
 
-</div>
+	  </div>
 
-</div>
+	</div>
 
-<div id="outline-container-2-2" class="outline-3">
-<h3 id="sec-2-2">Binray</h3>
-<div class="outline-text-3" id="text-2-2">
+	<div id="outline-container-2-2" class="outline-3">
+	  <h3 id="sec-2-2">Binray</h3>
+	  <div class="outline-text-3" id="text-2-2">
 
-<ul>
-<li>Windows <a href="http://fdupves.googlecode.com/files/fdupves-Klara.0.1-win32.rar">fdupves-Klara.0.1-win32.rar</a> 
-</li>
-<li>ArchLinux
-</li>
-<li>Debian
-</li>
-<li>Gent
-</li>
-</ul>
+	    <ul>
+	      <li><a href="http://code.google.com/p/fdupves/downloads/list">fdupves packages</a>
+	      </li>
+	    </ul>
 
-</div>
-</div>
+	  </div>
+	</div>
 
-</div>
+      </div>
 
-<div id="outline-container-3" class="outline-2">
-<h2 id="sec-3">版权</h2>
-<div class="outline-text-2" id="text-3">
+      <div id="outline-container-3" class="outline-2">
+	<h2 id="sec-3">版权</h2>
+	<div class="outline-text-2" id="text-3">
 
 
-<p>
-<a href="http://github.com/naihe2010/fdupves">fdupves</a> 源代码采用<a href="http://www.gnu.org/licenses/old-licenses/gpl-2.0.html">GPL</a> 授权，目前代码全部位于<a href="http://github.com">GitHub</a> 上。
-</p>
-</div>
+	  <p>
+	    <a href="http://github.com/naihe2010/fdupves">fdupves</a> 源代码采用<a href="http://www.gnu.org/licenses/old-licenses/gpl-2.0.html">GPL</a> 授权，目前代码全部位于<a href="http://github.com">GitHub</a> 上。
+	  </p>
+	</div>
 
-</div>
+      </div>
 
-<div id="outline-container-4" class="outline-2">
-<h2 id="sec-4">功能</h2>
-<div class="outline-text-2" id="text-4">
+      <div id="outline-container-4" class="outline-2">
+	<h2 id="sec-4">功能</h2>
+	<div class="outline-text-2" id="text-4">
 
 
-<p>
-它的主要功能，就是把给定的目录里面重复的视频（图片）文件，找出来，统一显示出来。
-</p>
-</div>
+	  <p>
+	    它的主要功能，就是把给定的目录里面重复的视频（图片）文件，找出来，统一显示出来。
+	  </p>
+	</div>
 
-</div>
+      </div>
 
-<div id="outline-container-5" class="outline-2">
-<h2 id="sec-5">依赖</h2>
-<div class="outline-text-2" id="text-5">
+      <div id="outline-container-5" class="outline-2">
+	<h2 id="sec-5">依赖</h2>
+	<div class="outline-text-2" id="text-5">
 
 
-<ul>
-<li><a href="http://www.gtk.org">gtk-2.0</a> 图形界面采用Gtk2开发。
-</li>
-<li><a href="http://ffmpeg.org">ffmpeg</a> 使用ffmpeg库读取视频文件。
-</li>
-</ul>
+	  <ul>
+	    <li><a href="http://www.gtk.org">gtk-2.0</a> 图形界面采用Gtk2开发。
+	    </li>
+	    <li><a href="http://ffmpeg.org">ffmpeg</a> 使用ffmpeg库读取视频文件。
+	    </li>
+	  </ul>
 
 
-</div>
+	</div>
 
-</div>
+      </div>
 
-<div id="outline-container-6" class="outline-2">
-<h2 id="sec-6">使用</h2>
-<div class="outline-text-2" id="text-6">
+      <div id="outline-container-6" class="outline-2">
+	<h2 id="sec-6">使用</h2>
+	<div class="outline-text-2" id="text-6">
 
 
 
-</div>
+	</div>
 
-<div id="outline-container-6-1" class="outline-3">
-<h3 id="sec-6-1">启动</h3>
-<div class="outline-text-3" id="text-6-1">
+	<div id="outline-container-6-1" class="outline-3">
+	  <h3 id="sec-6-1">启动</h3>
+	  <div class="outline-text-3" id="text-6-1">
 
 
-<p>
-如图所示：
-<img src="./icons/fdupves-Klara.0.1-startup.png"  alt="./icons/fdupves-Klara.0.1-startup.png" />
-</p>
-</div>
+	    <p>
+	      如图所示：
+	      <img src="./icons/fdupves-Klara.0.1-startup.png"  alt="./icons/fdupves-Klara.0.1-startup.png" />
+	    </p>
+	  </div>
 
-</div>
+	</div>
 
-<div id="outline-container-6-2" class="outline-3">
-<h3 id="sec-6-2">查找</h3>
-<div class="outline-text-3" id="text-6-2">
+	<div id="outline-container-6-2" class="outline-3">
+	  <h3 id="sec-6-2">查找</h3>
+	  <div class="outline-text-3" id="text-6-2">
 
 
-<ul>
-<li>点击'添加'按钮，选择你要查找重复文件的目录，可以选择多个，在多个目录间进行查找。如图所示：
-</li>
-</ul>
+	    <ul>
+	      <li>点击'添加'按钮，选择你要查找重复文件的目录，可以选择多个，在多个目录间进行查找。如图所示：
+	      </li>
+	    </ul>
 
-<p> <img src="./icons/fdupves-Klara.0.1-add.png"  alt="./icons/fdupves-Klara.0.1-add.png" />
-</p>
-<ul>
-<li>选择成功以后，左面的列表项会显示相应的目录，然后在下面的复选框里确认要查找的重复文件类型，是查找图片、视频还是都找。如图所示：
-</li>
-</ul>
+	    <p> <img src="./icons/fdupves-Klara.0.1-add.png"  alt="./icons/fdupves-Klara.0.1-add.png" />
+	    </p>
+	    <ul>
+	      <li>选择成功以后，左面的列表项会显示相应的目录，然后在下面的复选框里确认要查找的重复文件类型，是查找图片、视频还是都找。如图所示：
+	      </li>
+	    </ul>
 
-<p> <img src="./icons/fdupves-Klara.0.1-find.png"  alt="./icons/fdupves-Klara.0.1-find.png" />
-</p>
-</div>
+	    <p> <img src="./icons/fdupves-Klara.0.1-find.png"  alt="./icons/fdupves-Klara.0.1-find.png" />
+	    </p>
+	  </div>
 
-</div>
+	</div>
 
-<div id="outline-container-6-3" class="outline-3">
-<h3 id="sec-6-3">结果</h3>
-<div class="outline-text-3" id="text-6-3">
+	<div id="outline-container-6-3" class="outline-3">
+	  <h3 id="sec-6-3">结果</h3>
+	  <div class="outline-text-3" id="text-6-3">
 
 
-<ul>
-<li>查找结束以后，可以在结果框里选择一项或者多项进行进一步处理。
-</li>
-</ul>
+	    <ul>
+	      <li>查找结束以后，可以在结果框里选择一项或者多项进行进一步处理。
+	      </li>
+	    </ul>
 
-<p>以下三图分别为
-</p>
-<ol>
-<li>对一项打开文件、打开所在目录或者删除
-</li>
-</ol>
+	    <p>以下三图分别为
+	    </p>
+	    <ol>
+	      <li>对一项打开文件、打开所在目录或者删除
+	      </li>
+	    </ol>
 
-<p> <img src="./icons/fdupves-Klara.0.1-1rightclick.png"  alt="./icons/fdupves-Klara.0.1-1rightclick.png" />
-</p><ol>
-<li>对两项比较或者删除两项
-</li>
-</ol>
+	    <p> <img src="./icons/fdupves-Klara.0.1-1rightclick.png"  alt="./icons/fdupves-Klara.0.1-1rightclick.png" />
+	    </p><ol>
+	      <li>对两项比较或者删除两项
+	      </li>
+	    </ol>
 
-<p> <img src="./icons/fdupves-Klara.0.1-2rightclick.png"  alt="./icons/fdupves-Klara.0.1-2rightclick.png" />
-</p><ol>
-<li>对多项进行删除
-</li>
-</ol>
+	    <p> <img src="./icons/fdupves-Klara.0.1-2rightclick.png"  alt="./icons/fdupves-Klara.0.1-2rightclick.png" />
+	    </p><ol>
+	      <li>对多项进行删除
+	      </li>
+	    </ol>
 
-<p> <img src="./icons/fdupves-Klara.0.1-mrightclick.png"  alt="./icons/fdupves-Klara.0.1-mrightclick.png" />
-</p>
-</div>
-</div>
+	    <p> <img src="./icons/fdupves-Klara.0.1-mrightclick.png"  alt="./icons/fdupves-Klara.0.1-mrightclick.png" />
+	    </p>
+	  </div>
+	</div>
 
-</div>
+      </div>
 
-<div id="outline-container-7" class="outline-2">
-<h2 id="sec-7">反馈</h2>
-<div class="outline-text-2" id="text-7">
+      <div id="outline-container-7" class="outline-2">
+	<h2 id="sec-7">反馈</h2>
+	<div class="outline-text-2" id="text-7">
+	  <ul>
+	    <li>新浪微博：<a href="http://weibo.com/naihe2010">naihe2010</a>
+	    </li>
+	    <li>Issue List：<a href="http://code.google.com/p/fdupves/issues/list">http://code.google.com/p/fdupves/issues/list</a>
+	    </li>
+	  </ul>
+	</div>
+      </div>
+    </div>
 
+    <div id="postamble">
+      <p class="date">Date: 2013-02-22 09:34:10 CST</p>
+      <p class="author">Author: Alf</p>
+      <p class="creator">Org version 7.8.11 with Emacs version 24</p>
+      <a href="http://validator.w3.org/check?uri=referer">Validate XHTML 1.0</a>
 
-<ul>
-<li>Web: <a href="http://github.com/naihe2010/fdupves">http://github.com/naihe2010/fdupves</a>
-</li>
-<li>Email: <a href="mailto:naihe2010@126.com">naihe2010@126.com</a>
-</li>
-<li>Blog: <a href="http://blog.sina.com.cn/naihe2010">http://blog.sina.com.cn/naihe2010</a>
-</li>
-</ul>
-
-</div>
-</div>
-</div>
-
-<div id="postamble">
-<p class="date">Date: 2013-02-22 09:34:10 CST</p>
-<p class="author">Author: Alf</p>
-<p class="creator">Org version 7.8.11 with Emacs version 24</p>
-<a href="http://validator.w3.org/check?uri=referer">Validate XHTML 1.0</a>
-
-</div>
-</body>
+    </div>
+  </body>
 </html>

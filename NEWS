@@ -4,3 +4,6 @@ Klara.0.1
 Klara.0.2
 * Fix the 'open/open dir' can't work bug
 * add help document file
+
+Klara.0.3
+* add open file action in result window by double click

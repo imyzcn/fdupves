@@ -4,16 +4,16 @@ fdupves
 
 = Synopsis =
 
-fdupves is a Perl script for finding duplicate video files in a given set of directories.
+fdupves is for finding duplicate video/image files in a given set of directories.
 
 = Description =
 
-Searches the given path for duplicate video files. Such files are found by comparing file sizes and screen picture, accepted by choose of user.
+Searches the given path for duplicate video or image files. Such files are found by Perceptual Hash of every file.
 
 = Requirement =
 
-* Perl: http://www.perl.org/
-* MPlayer: http://www.mplayerhq.hu/
+* Gtk2: http://www.gtk.org/
+* FFmpeg: http://ffmpeg.org/
 
 = Authors =
 
