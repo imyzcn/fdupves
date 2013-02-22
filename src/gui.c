@@ -461,7 +461,9 @@ gui_find_thread (gui_t *gui)
 
   gui->images = g_ptr_array_new_with_free_func (g_free);
   gui->videos = g_ptr_array_new_with_free_func (g_free);
+  gdk_threads_enter ();
   gtk_tree_store_clear (gui->restree);
+  gdk_threads_leave ();
 
   gtk_tree_model_foreach (GTK_TREE_MODEL (gui->dirlist),
 			  (GtkTreeModelForeachFunc) dir_find_item,
@@ -469,23 +471,33 @@ gui_find_thread (gui_t *gui)
 
   if (g_ini->proc_image && gui->images->len > 0)
     {
+      gdk_threads_enter ();
       g_message (_ ("find %d images to process"), gui->images->len);
+      gdk_threads_leave ();
+
       listi = find_images (gui->images);
+
       gdk_threads_enter ();
       g_slist_foreach (listi, (GFunc) gui_add_same_node, gui);
-      gdk_threads_leave ();
       g_message (_ ("find %d groups same images"), g_slist_length (listi));
+      gdk_threads_leave ();
+
       same_list_free (listi);
     }
 
   if (g_ini->proc_video && gui->videos->len > 0)
     {
+      gdk_threads_enter ();
       g_message (_ ("find %d videos to process"), gui->videos->len);
+      gdk_threads_leave ();
+
       listv = find_videos (gui->videos);
+
       gdk_threads_enter ();
       g_slist_foreach (listv, (GFunc) gui_add_same_node, gui);
-      gdk_threads_leave ();
       g_message (_ ("find %d groups same videos"), g_slist_length (listv));
+      gdk_threads_leave ();
+
       same_list_free (listv);
     }
 
@@ -507,6 +519,31 @@ gui_pref_cb (GtkWidget *wid, gui_t *gui)
 static void
 gui_help_cb (GtkWidget *wid, gui_t *gui)
 {
+  gchar *prgdir, *helpfile;
+#ifndef WIN32
+  gchar *uri;
+#endif
+
+  prgdir = fd_install_path ();
+  if (prgdir)
+    {
+      helpfile = g_build_filename (prgdir, FD_SYS_HELP_FILE, NULL);
+      g_free (prgdir);
+    }
+  else
+    {
+      helpfile = g_strdup (FD_SYS_HELP_FILE);
+    }
+
+#ifndef WIN32
+  uri = g_filename_to_uri (helpfile, NULL, NULL);
+  gtk_show_uri (NULL, uri, GDK_CURRENT_TIME, NULL);
+  g_free (uri);
+#else
+  ShellExecute (NULL, "open", helpfile, NULL, NULL, SW_SHOW);
+#endif
+
+  g_free (helpfile);
 }
 
 static void
@@ -818,6 +855,7 @@ restreesel_onchanged (GtkTreeSelection *sel, gui_t *gui)
 static void
 restree_open (GtkMenuItem *item, gui_t *gui)
 {
+#ifndef WIN32
   gchar *uri;
   GError *err;
 
@@ -831,16 +869,32 @@ restree_open (GtkMenuItem *item, gui_t *gui)
     }
   g_free (uri);
 
-#ifdef WIN32
-  ShellExecute (NULL, "open", gui->resselfiles[0], NULL, NULL, SW_SHOW);
+#else
+  gchar *filename;
+
+  filename = g_win32_locale_filename_from_utf8 (gui->resselfiles[0]);
+  if (filename)
+    {
+      ShellExecute (NULL, "open", filename, NULL, NULL, SW_SHOW);
+      g_free (filename);
+    }
+  else
+    {
+      ShellExecute (NULL, "open", gui->resselfiles[0], NULL, NULL, SW_SHOW);
+    }
 #endif
 }
 
 static void
 restree_opendir (GtkMenuItem *item, gui_t *gui)
 {
-  gchar *dir, *uri;
+  gchar *dir;
+#ifndef WIN32
+  gchar *uri;
   GError *err;
+#else
+  gchar *dirname;
+#endif
 
   dir = g_path_get_dirname (gui->resselfiles[0]);
   if (dir == NULL)
@@ -849,6 +903,7 @@ restree_opendir (GtkMenuItem *item, gui_t *gui)
       return;
     }
 
+#ifndef WIN32
   uri = g_filename_to_uri (dir, NULL, NULL);
 
   err = NULL;
@@ -860,8 +915,18 @@ restree_opendir (GtkMenuItem *item, gui_t *gui)
     }
   g_free (uri);
 
-#ifdef WIN32
-  ShellExecute (NULL, "open", dir, NULL, NULL, SW_SHOW);
+#else
+
+  dirname = g_win32_locale_filename_from_utf8 (dir);
+  if (dirname)
+    {
+      ShellExecute (NULL, "open", dirname, NULL, NULL, SW_SHOW);
+      g_free (dirname);
+    }
+  else
+    {
+      ShellExecute (NULL, "open", dir, NULL, NULL, SW_SHOW);
+    }
 #endif
   g_free (dir);
 }

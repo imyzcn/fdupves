@@ -38,6 +38,7 @@
  * */
 #define FD_SYS_CONF_FILE   "etc/fdupvesrc"
 #define FD_SYS_ICON_DIR    "share/fdupves/icons"
+#define FD_SYS_HELP_FILE   "share/fdupves/fdupves.html"
 #define FD_SYS_LOCALE_DIR  "share/locale"
 
 /*
