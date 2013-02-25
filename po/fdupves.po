@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: acnchess 0.0.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2013-02-20 16:23+0800\n"
+"POT-Creation-Date: 2013-02-25 11:35+0800\n"
 "PO-Revision-Date: 2011-09-05 11:12+0800\n"
 "Last-Translator: Alf <naihe2010@126.com>\n"
 "Language-Team: Alf <naihe2010@126.com>\n"
@@ -16,119 +16,135 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:227
+#: /home/pengda/personal/project/fdupves/src/gui.c:250
 msgid "Add"
 msgstr "添加"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:229
+#: /home/pengda/personal/project/fdupves/src/gui.c:252
 msgid "Add Source Files"
 msgstr "加入源文件"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:236
+#: /home/pengda/personal/project/fdupves/src/gui.c:259
 msgid "Find"
 msgstr "查找"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:238
+#: /home/pengda/personal/project/fdupves/src/gui.c:261
 msgid "Find Duplicate Files"
 msgstr "查找重复文件"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:245
-#: /home/pengda/personal/project/fdupves/src/gui.c:247
+#: /home/pengda/personal/project/fdupves/src/gui.c:268
+#: /home/pengda/personal/project/fdupves/src/gui.c:270
 msgid "Preference"
 msgstr "首选项"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:254
+#: /home/pengda/personal/project/fdupves/src/gui.c:277
 msgid "Help"
 msgstr "帮助"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:255
+#: /home/pengda/personal/project/fdupves/src/gui.c:278
 msgid "Help infomations"
 msgstr "帮助信息"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:320
+#: /home/pengda/personal/project/fdupves/src/gui.c:362
 msgid "Path"
 msgstr "源目录"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:331
+#: /home/pengda/personal/project/fdupves/src/gui.c:373
 msgid "Image"
 msgstr "图片"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:336
+#: /home/pengda/personal/project/fdupves/src/gui.c:378
 msgid "Video"
 msgstr "视频"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:354
+#: /home/pengda/personal/project/fdupves/src/gui.c:396
 msgid "Message"
 msgstr "消息"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:375
+#: /home/pengda/personal/project/fdupves/src/gui.c:417
 msgid "Result"
 msgstr "结果"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:414
+#: /home/pengda/personal/project/fdupves/src/gui.c:456
 msgid "Choose Folder"
 msgstr "选择目录"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:472
+#: /home/pengda/personal/project/fdupves/src/gui.c:518
 #, c-format
 msgid "find %d images to process"
 msgstr "找到%d张图片要处理"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:477
+#: /home/pengda/personal/project/fdupves/src/gui.c:522
 #, c-format
 msgid "find %d groups same images"
 msgstr "找到%d组相同/相似图片"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:483
+#: /home/pengda/personal/project/fdupves/src/gui.c:532
 #, c-format
 msgid "find %d videos to process"
 msgstr "找到%d个视频要处理"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:488
+#: /home/pengda/personal/project/fdupves/src/gui.c:536
 #, c-format
 msgid "find %d groups same videos"
 msgstr "找到%d组相同/相似视频"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:649
+#: /home/pengda/personal/project/fdupves/src/gui.c:710
 msgid "Are you sure you want to quit fdupves? "
 msgstr "你确定要退出fdupves？"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:731
+#: /home/pengda/personal/project/fdupves/src/gui.c:801
 msgid "process file"
 msgstr "处理文件"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:744
+#: /home/pengda/personal/project/fdupves/src/gui.c:814
 msgid "open"
 msgstr "打开"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:755
+#: /home/pengda/personal/project/fdupves/src/gui.c:825
 msgid "open dir"
 msgstr "打开目录"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:766
+#: /home/pengda/personal/project/fdupves/src/gui.c:836
 msgid "delete"
 msgstr "删除"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:777
+#: /home/pengda/personal/project/fdupves/src/gui.c:847
 msgid "diff"
 msgstr "比较"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:934
+#: /home/pengda/personal/project/fdupves/src/gui.c:1032
 msgid "Are you sure you want to delete these files? "
 msgstr "你确定要删除这些文件？"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:1143
+#: /home/pengda/personal/project/fdupves/src/gui.c:1241
 msgid "From Tail"
 msgstr "从尾开始"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:1150
+#: /home/pengda/personal/project/fdupves/src/gui.c:1248
 msgid "Compare Count"
 msgstr "比较次数"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:1157
+#: /home/pengda/personal/project/fdupves/src/gui.c:1255
 msgid "Previous"
 msgstr "向前"
 
-#: /home/pengda/personal/project/fdupves/src/gui.c:1161
+#: /home/pengda/personal/project/fdupves/src/gui.c:1259
 msgid "Next"
 msgstr "向后"
+
+#: /home/pengda/personal/project/fdupves/src/find.c:81
+msgid "Generate image hash value"
+msgstr "生成图片哈希值"
+
+#: /home/pengda/personal/project/fdupves/src/find.c:89
+msgid "Compare image hash value"
+msgstr "比较图片哈希值"
+
+#: /home/pengda/personal/project/fdupves/src/find.c:137
+msgid "Generate video screenshot hash value"
+msgstr "生成视频截图哈希值"
+
+#: /home/pengda/personal/project/fdupves/src/find.c:144
+msgid "Compare video screenshot hash value"
+msgstr "比较视频截图哈希值"

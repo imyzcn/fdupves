@@ -28,6 +28,7 @@
 #include "hash.h"
 #include "video.h"
 #include "ini.h"
+#include "util.h"
 
 #include <string.h>
 
@@ -52,33 +53,41 @@ struct st_file
 struct st_find
 {
   GPtrArray *ptr[0x10];
+  find_step *step;
+  find_step_cb cb;
+  gpointer arg;
 };
 
 static void vfind_prepare (const gchar *, struct st_find *);
 static int vfind_time_hash (struct st_file *, int, int);
 static void st_file_free (struct st_file *);
 static gboolean is_video_same (struct st_file *, struct st_file *, gboolean);
-static GSList *append_same_slist (GSList *,
-				  const gchar *, const gchar *,
-				  same_type);
 
-GSList *
-find_images (GPtrArray *ptr)
+int
+find_images (GPtrArray *ptr, find_step_cb cb, gpointer arg)
 {
-  GSList *list;
   size_t i, j;
-  int dist;
+  int dist, count;
   hash_t *hashs;
+  find_step step[1];
+
+  count = 0;
 
   hashs = g_new0 (hash_t, ptr->len);
-  g_return_val_if_fail (hashs, NULL);
+  g_return_val_if_fail (hashs, 0);
 
+  step->found = FALSE;
+  step->total = ptr->len;
+  step->doing = _ ("Generate image hash value");
   for (i = 0; i < ptr->len; ++ i)
     {
       hashs[i] = file_hash ((gchar *) g_ptr_array_index (ptr, i));
+      step->now = i;
+      cb (step, arg);
     }
 
-  list = NULL;
+  step->doing = _ ("Compare image hash value");
+  step->now = 0;
   for (i = 0; i < ptr->len - 1; ++ i)
     {
       for (j = i + 1; j < ptr->len; ++ j)
@@ -86,38 +95,60 @@ find_images (GPtrArray *ptr)
 	  dist = hash_cmp (hashs[i], hashs[j]);
 	  if (dist < g_ini->hash_distance)
 	    {
-	      list = append_same_slist (list,
-					g_ptr_array_index (ptr, i),
-					g_ptr_array_index (ptr, j),
-					FD_SAME_IMAGE);
+	      step->found = TRUE;
+	      step->afile = g_ptr_array_index (ptr, i);
+	      step->bfile = g_ptr_array_index (ptr, j);
+	      step->type = FD_SAME_IMAGE;
+	      cb (step, arg);
+	      ++ count;
 	    }
 	}
+
+      step->now = i;
+      step->found = FALSE;
+      cb (step, arg);
     }
 
   g_free (hashs);
 
-  return list;
+  return count;
 }
 
-GSList *
-find_videos (GPtrArray *ptr)
+int
+find_videos (GPtrArray *ptr, find_step_cb cb, gpointer arg)
 {
-  GSList *list;
   gsize i, j, g, group_cnt;
-  int dist;
+  int dist, count;
   struct st_find find[1];
   struct st_file *afile, *bfile;
+  find_step step[1];
+
+  count = 0;
 
   for (i = 0; g_ini->video_timers[i][0]; ++ i)
     {
       find->ptr[i] = g_ptr_array_new_with_free_func ((GFreeFunc) st_file_free);
     }
   group_cnt = i;
+
+  step->found = FALSE;
+  step->total = ptr->len;
+  step->now = 0;
+  step->doing = _ ("Generate video screenshot hash value");
+
+  find->step = step;
+  find->cb = cb;
+  find->arg = arg;
   g_ptr_array_foreach (ptr, (GFunc) vfind_prepare, find);
 
-  list = NULL;
+  step->doing = _ ("Compare video screenshot hash value");
   for (g = 0; g < group_cnt; ++ g)
     {
+      if (find->ptr[g]->len <= 0)
+	{
+	  continue;
+	}
+
       for (i = 0; i < find->ptr[g]->len - 1; ++ i)
 	{
 	  for (j = i + 1; j < find->ptr[g]->len; ++ j)
@@ -143,9 +174,12 @@ find_videos (GPtrArray *ptr)
 		{
 		  if (is_video_same (afile, bfile, FALSE))
 		    {
-		      list = append_same_slist (list,
-						afile->file, bfile->file,
-						FD_SAME_VIDEO_HEAD);
+		      step->found = TRUE;
+		      step->afile = afile->file;
+		      step->bfile = bfile->file;
+		      step->type = FD_SAME_VIDEO_HEAD;
+		      cb (step, arg);
+		      ++ count;
 		      continue;
 		    }
 		}
@@ -168,18 +202,26 @@ find_videos (GPtrArray *ptr)
 		{
 		  if (is_video_same (afile, bfile, TRUE))
 		    {
-		      list = append_same_slist (list,
-						afile->file, bfile->file,
-						FD_SAME_VIDEO_TAIL);
+		      step->found = TRUE;
+		      step->afile = afile->file;
+		      step->bfile = bfile->file;
+		      step->type = FD_SAME_VIDEO_TAIL;
+		      cb (step, arg);
+		      ++ count;
 		    }
 		}
 	    }
+
+	  step->found = FALSE;
+	  step->total = find->ptr[g]->len;
+	  step->now = i;
+	  cb (step, arg);
 	}
 
       g_ptr_array_free (find->ptr[g], TRUE);
     }
 
-  return list;
+  return count;
 }
 
 static void
@@ -216,20 +258,9 @@ vfind_prepare (const gchar *file, struct st_find *find)
 
       g_ptr_array_add (find->ptr[i], stv);
     }
-}
 
-void
-same_node_free (same_node *node)
-{
-  g_slist_free (node->files);
-  g_free (node);
-}
-
-void
-same_list_free (GSList *list)
-{
-  g_slist_foreach (list, (GFunc) same_node_free, NULL);
-  g_slist_free (list);
+  ++ find->step->now;
+  find->cb (find->step, find->arg);
 }
 
 static gboolean
@@ -290,61 +321,4 @@ vfind_time_hash (struct st_file *file, int seek, int tail)
     }
 
   return 0;
-}
-
-static GSList *
-append_same_slist (GSList *slist,
-		   const gchar *afile, const gchar *bfile,
-		   same_type type)
-{
-  GSList *cur, *fslist;
-  same_node *node;
-  gboolean afind, bfind;
-
-  for (cur = slist; cur; cur = g_slist_next (cur))
-    {
-      node = cur->data;
-
-      if (node->type != type)
-	{
-	  continue;
-	}
-
-      afind = bfind = FALSE;
-      for (fslist = node->files; fslist; fslist = g_slist_next (fslist))
-	{
-	  if (strcmp (fslist->data, afile) == 0)
-	    {
-	      afind = TRUE;
-	    }
-	  else if (strcmp (fslist->data, bfile) == 0)
-	    {
-	      bfind = TRUE;
-	    }
-	}
-
-      if (afind && bfind)
-	{
-	  return slist;
-	}
-      else if (afind)
-	{
-	  node->files = g_slist_append (node->files, (gpointer) bfile);
-	  return slist;
-	}
-      else if (bfind)
-	{
-	  node->files = g_slist_append (node->files, (gpointer) afile);
-	  return slist;
-	}
-    }
-
-  node = g_malloc0 (sizeof (same_node));
-  g_return_val_if_fail (node, slist);
-
-  node->type = type;
-  node->files = g_slist_append (node->files, (gpointer) afile);
-  node->files = g_slist_append (node->files, (gpointer) bfile);
-
-  return g_slist_append (slist, node);
 }

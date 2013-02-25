@@ -44,6 +44,7 @@ typedef struct
 {
   GtkWidget *widget;
   GtkWidget *mainvbox;
+  GtkWidget *progress;
 
   GtkToolItem *but_add;
   GtkToolItem *but_find;
@@ -52,7 +53,9 @@ typedef struct
 
   GPtrArray *images;
   GPtrArray *videos;
+  GSList *same_list;
 
+  GtkWidget *logtree;
   GtkListStore *loglist;
 
   GtkTreeStore *restree;
@@ -91,18 +94,30 @@ static void diffdia_onprev (GtkWidget *, diff_dialog *);
 
 static void toolbar_new (gui_t *);
 static void mainframe_new (gui_t *);
-static void statusbar_new (gui_t *);
+static void progressbar_new (gui_t *);
 
 static void gui_add_cb (GtkWidget *, gui_t *);
 static void gui_find_cb (GtkWidget *, gui_t *);
 static void gui_pref_cb (GtkWidget *, gui_t *);
 static void gui_help_cb (GtkWidget *, gui_t *);
 
+static void gui_find_step_cb (const find_step *, gui_t *);
+static GSList *gui_append_same_slist (gui_t *, GSList *,
+				      const gchar *, const gchar *,
+				      same_type);
+typedef struct
+{
+  same_type type;
+  GSList *files;
+  GtkTreeRowReference *treerowref;
+} same_node;
+void same_node_free (same_node *);
+void same_list_free (GSList *);
+
 static gui_t gui[1];
 static void gui_destroy (gui_t *);
 static void gui_destroy_cb (GtkWidget *, GdkEvent *, gui_t *);
 static void gui_add_dir (gui_t *, const gchar *);
-static void gui_add_same_node (same_node *node, gui_t *);
 
 static void gui_find_thread (gui_t *);
 
@@ -141,6 +156,10 @@ static void restree_diff (GtkMenuItem *, gui_t *);
 #define FDUPVES_THREAD_STACK_SIZE (1024 * 1024 * 10)
 #endif
 
+#ifndef FDUPVES_MAXLOG
+#define FDUPVES_MAXLOG 1000
+#endif
+
 gboolean
 gui_init (int argc, char *argv[])
 {
@@ -174,7 +193,7 @@ gui_init (int argc, char *argv[])
 
   toolbar_new (gui);
   mainframe_new (gui);
-  statusbar_new (gui);
+  progressbar_new (gui);
 
   gtk_widget_show_all (gui->widget);
 
@@ -268,12 +287,31 @@ gui_log (const gchar *log_domain,
 	 gpointer user_data)
 {
   GtkTreeIter itr[1];
+  GtkTreePath *path;
   gui_t *gui;
 
   gui = (gui_t *) user_data;
 
+  gdk_threads_enter ();
   gtk_list_store_append (gui->loglist, itr);
   gtk_list_store_set (gui->loglist, itr, 0, message, -1);
+
+  path = gtk_tree_model_get_path (GTK_TREE_MODEL (gui->loglist),
+				  itr);
+  gtk_tree_view_scroll_to_cell (GTK_TREE_VIEW (gui->logtree),
+				path, NULL,
+				FALSE,
+				0.0, 0.0);
+  gtk_tree_path_free (path);
+
+  if (gtk_tree_model_iter_n_children (GTK_TREE_MODEL (gui->loglist),
+				      NULL) >= FDUPVES_MAXLOG)
+    {
+      gtk_tree_model_get_iter_first (GTK_TREE_MODEL (gui->loglist),
+				     itr);
+      gtk_list_store_remove (gui->loglist, itr);
+    }
+  gdk_threads_leave ();
 }
 
 static void
@@ -349,8 +387,8 @@ mainframe_new (gui_t *gui)
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (win),
 				       GTK_SHADOW_IN);
   gui->loglist = gtk_list_store_new (1, G_TYPE_STRING);
-  tree = gtk_tree_view_new_with_model (GTK_TREE_MODEL (gui->loglist));
-  gtk_container_add (GTK_CONTAINER (win), tree);
+  gui->logtree = gtk_tree_view_new_with_model (GTK_TREE_MODEL (gui->loglist));
+  gtk_container_add (GTK_CONTAINER (win), gui->logtree);
   gtk_paned_add2 (GTK_PANED (vpaned), win);
 
   renderer = gtk_cell_renderer_text_new ();
@@ -359,7 +397,7 @@ mainframe_new (gui_t *gui)
      renderer, "text", 0,
      NULL);
   gtk_tree_view_column_set_resizable (column, TRUE);
-  gtk_tree_view_append_column (GTK_TREE_VIEW (tree), column);
+  gtk_tree_view_append_column (GTK_TREE_VIEW (gui->logtree), column);
 
   g_log_set_handler (NULL, G_LOG_LEVEL_MASK,
 		     gui_log, gui);
@@ -395,12 +433,10 @@ mainframe_new (gui_t *gui)
 }
 
 static void
-statusbar_new (gui_t *gui)
+progressbar_new (gui_t *gui)
 {
-  GtkWidget *status;
-
-  status = gtk_statusbar_new ();
-  gtk_box_pack_end (GTK_BOX (gui->mainvbox), status, FALSE, FALSE, 2);
+  gui->progress = gtk_progress_bar_new ();
+  gtk_box_pack_end (GTK_BOX (gui->mainvbox), gui->progress, FALSE, FALSE, 2);
 }
 
 static void
@@ -457,19 +493,21 @@ gui_find_cb (GtkWidget *wid, gui_t *gui)
 static void
 gui_find_thread (gui_t *gui)
 {
-  GSList *listi, *listv;
+  int fimage, fvideo;
 
   /* disable the add/find tool time */
   gdk_threads_enter ();
   gtk_widget_set_sensitive (GTK_WIDGET (gui->but_add), FALSE);
   gtk_widget_set_sensitive (GTK_WIDGET (gui->but_find), FALSE);
+
+  gtk_progress_bar_set_text (GTK_PROGRESS_BAR (gui->progress), "");
+  gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (gui->progress), 0);
+
+  gtk_tree_store_clear (gui->restree);
   gdk_threads_leave ();
 
   gui->images = g_ptr_array_new_with_free_func (g_free);
   gui->videos = g_ptr_array_new_with_free_func (g_free);
-  gdk_threads_enter ();
-  gtk_tree_store_clear (gui->restree);
-  gdk_threads_leave ();
 
   gtk_tree_model_foreach (GTK_TREE_MODEL (gui->dirlist),
 			  (GtkTreeModelForeachFunc) dir_find_item,
@@ -477,41 +515,40 @@ gui_find_thread (gui_t *gui)
 
   if (g_ini->proc_image && gui->images->len > 0)
     {
-      gdk_threads_enter ();
       g_message (_ ("find %d images to process"), gui->images->len);
-      gdk_threads_leave ();
 
-      listi = find_images (gui->images);
+      find_images (gui->images, (find_step_cb) gui_find_step_cb, gui);
+      fimage = g_slist_length (gui->same_list);
+      g_message (_ ("find %d groups same images"), fimage);
 
       gdk_threads_enter ();
-      g_slist_foreach (listi, (GFunc) gui_add_same_node, gui);
-      g_message (_ ("find %d groups same images"), g_slist_length (listi));
+      same_list_free (gui->same_list);
+      gui->same_list = NULL;
       gdk_threads_leave ();
-
-      same_list_free (listi);
     }
 
   if (g_ini->proc_video && gui->videos->len > 0)
     {
-      gdk_threads_enter ();
       g_message (_ ("find %d videos to process"), gui->videos->len);
-      gdk_threads_leave ();
 
-      listv = find_videos (gui->videos);
+      find_videos (gui->videos, (find_step_cb) gui_find_step_cb, gui);
+      fvideo = g_slist_length (gui->same_list);
+      g_message (_ ("find %d groups same videos"), fvideo);
 
       gdk_threads_enter ();
-      g_slist_foreach (listv, (GFunc) gui_add_same_node, gui);
-      g_message (_ ("find %d groups same videos"), g_slist_length (listv));
+      same_list_free (gui->same_list);
+      gui->same_list = NULL;
       gdk_threads_leave ();
-
-      same_list_free (listv);
     }
 
   g_ptr_array_free (gui->images, TRUE);
   g_ptr_array_free (gui->videos, TRUE);
 
-  /* disable the add/find tool time */
   gdk_threads_enter ();
+  gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (gui->progress), 0);
+  gtk_progress_bar_set_text (GTK_PROGRESS_BAR (gui->progress), "");
+
+  /* disable the add/find tool time */
   gtk_widget_set_sensitive (GTK_WIDGET (gui->but_add), TRUE);
   gtk_widget_set_sensitive (GTK_WIDGET (gui->but_find), TRUE);
   gdk_threads_leave ();
@@ -550,25 +587,6 @@ gui_help_cb (GtkWidget *wid, gui_t *gui)
 #endif
 
   g_free (helpfile);
-}
-
-static void
-gui_add_same_node (same_node *node, gui_t *gui)
-{
-  GtkTreeIter itr[1], itrc[1];
-  GSList *cur;
-
-  /* add first file as parent */
-  cur = node->files;
-  gtk_tree_store_append (gui->restree, itr, NULL);
-  gtk_tree_store_set (gui->restree, itr, 0, cur->data, -1);
-
-  /* add children files */
-  while ((cur = g_slist_next (cur)) != NULL)
-    {
-      gtk_tree_store_append (gui->restree, itrc, itr);
-      gtk_tree_store_set (gui->restree, itrc, 0, cur->data, -1);
-    }
 }
 
 static gboolean
@@ -1357,4 +1375,136 @@ diffdia_onseekchanged (GtkEntry *entry, diff_dialog *dia)
 
   dia->index = 1;
   diffdia_refresh_video_pic (dia);
+}
+
+static void
+gui_find_step_cb (const find_step *step, gui_t *gui)
+{
+  if (step->doing)
+    {
+      gdk_threads_enter ();
+      gtk_progress_bar_set_text (GTK_PROGRESS_BAR (gui->progress),
+				 step->doing);
+      gdk_threads_leave ();
+    }
+
+  if (step->total > 0 && step->now < step->total)
+    {
+      gdk_threads_enter ();
+      gtk_progress_bar_set_fraction
+	(GTK_PROGRESS_BAR (gui->progress),
+	 (gdouble) step->now / (gdouble) step->total);
+      gdk_threads_leave ();
+    }
+
+  if (step->found)
+    {
+      gui->same_list = gui_append_same_slist (gui,
+					      gui->same_list,
+					      step->afile,
+					      step->bfile,
+					      step->type
+					      );
+    }
+}
+
+static GSList *
+gui_append_same_slist (gui_t *gui, GSList *slist,
+		       const gchar *afile, const gchar *bfile,
+		       same_type type)
+{
+  GSList *cur, *fslist;
+  same_node *node;
+  gboolean afind, bfind;
+  GtkTreeIter itr[1], itrc[1];
+  GtkTreePath *path;
+
+  for (cur = slist; cur; cur = g_slist_next (cur))
+    {
+      node = cur->data;
+
+      if (node->type != type)
+	{
+	  continue;
+	}
+
+      afind = bfind = FALSE;
+      for (fslist = node->files; fslist; fslist = g_slist_next (fslist))
+	{
+	  if (strcmp (fslist->data, afile) == 0)
+	    {
+	      afind = TRUE;
+	    }
+	  else if (strcmp (fslist->data, bfile) == 0)
+	    {
+	      bfind = TRUE;
+	    }
+	}
+
+      if (afind && bfind)
+	{
+	  return slist;
+	}
+      else if (afind)
+	{
+	  node->files = g_slist_append (node->files, (gpointer) bfile);
+
+	  gdk_threads_enter ();
+	  path = gtk_tree_row_reference_get_path (node->treerowref);
+	  gtk_tree_model_get_iter (GTK_TREE_MODEL (gui->restree), itr, path);
+	  gtk_tree_store_append (gui->restree, itrc, itr);
+	  gtk_tree_store_set (gui->restree, itrc, 0, bfile, -1);
+	  gtk_tree_path_free (path);
+	  gdk_threads_leave ();
+
+	  return slist;
+	}
+      else if (bfind)
+	{
+	  node->files = g_slist_append (node->files, (gpointer) afile);
+
+	  gdk_threads_enter ();
+	  path = gtk_tree_row_reference_get_path (node->treerowref);
+	  gtk_tree_model_get_iter (GTK_TREE_MODEL (gui->restree), itr, path);
+	  gtk_tree_store_append (gui->restree, itrc, itr);
+	  gtk_tree_store_set (gui->restree, itrc, 0, afile, -1);
+	  gtk_tree_path_free (path);
+	  gdk_threads_leave ();
+
+	  return slist;
+	}
+    }
+
+  node = g_malloc0 (sizeof (same_node));
+  g_return_val_if_fail (node, slist);
+
+  node->type = type;
+  node->files = g_slist_append (node->files, (gpointer) afile);
+  node->files = g_slist_append (node->files, (gpointer) bfile);
+
+  gdk_threads_enter ();
+  gtk_tree_store_append (gui->restree, itr, NULL);
+  gtk_tree_store_set (gui->restree, itr, 0, afile, -1);
+  path = gtk_tree_model_get_path (GTK_TREE_MODEL (gui->restree), itr);
+  node->treerowref = gtk_tree_row_reference_new (GTK_TREE_MODEL (gui->restree), path);
+  gtk_tree_store_append (gui->restree, itrc, itr);
+  gtk_tree_store_set (gui->restree, itrc, 0, bfile, -1);
+  gdk_threads_leave ();
+
+  return g_slist_append (slist, node);
+}
+
+void
+same_node_free (same_node *node)
+{
+  gtk_tree_row_reference_free (node->treerowref);
+  g_slist_free (node->files);
+  g_free (node);
+}
+
+void
+same_list_free (GSList *list)
+{
+  g_slist_foreach (list, (GFunc) same_node_free, NULL);
+  g_slist_free (list);
 }

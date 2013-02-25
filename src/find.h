@@ -38,16 +38,19 @@ typedef enum
 
 typedef struct
 {
+  long total;
+  long now;
+  const gchar *doing;
+  gboolean found;
   same_type type;
-  GSList *files;
-} same_node;
+  const gchar *afile;
+  const gchar *bfile;
+} find_step;
 
-GSList * find_images (GPtrArray *);
+typedef void (*find_step_cb) (const find_step *, gpointer);
 
-GSList * find_videos (GPtrArray *);
+int find_images (GPtrArray *, find_step_cb, gpointer);
 
-void same_node_free (same_node *);
-
-void same_list_free (GSList *);
+int find_videos (GPtrArray *, find_step_cb, gpointer);
 
 #endif
