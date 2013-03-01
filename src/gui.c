@@ -42,25 +42,76 @@
 
 typedef struct
 {
+  same_type type;
+  GSList *files;
+  GtkTreeRowReference *treerowref;
+  gboolean show;
+} same_node;
+
+void same_node_free (same_node *);
+void same_list_free (GSList *);
+
+typedef struct
+{
+  /* same node */
+  same_node *node;
+
+  gchar *path;
+  gchar *name;
+  gchar *dir;
+
+  /* FD_IMAGE FD_VIDEO */
+  gint type;
+
+  /* format desc */
+  gchar *format;
+
+  /* file size */
+  gint size;
+
+  /* image/screenshot size */
+  gint width, height;
+
+  /* video length */
+  gdouble length;
+
+  /* bool select */
+  gboolean selected;
+} file_node;
+
+static file_node * file_node_new (same_node *,
+				  const gchar *, gint);
+static void file_node_free (file_node *);
+/* free the file node and same_node if necesstity */
+static void file_node_free_full (file_node *);
+static void file_node_to_tree_iter (file_node *,
+				    GtkTreeStore *, GtkTreeIter *);
+
+typedef struct
+{
   GtkWidget *widget;
   GtkWidget *mainvbox;
   GtkWidget *progress;
 
   GtkToolItem *but_add;
   GtkToolItem *but_find;
+  GtkToolItem *but_del;
 
-  GtkListStore *dirlist;
+  GtkListStore *dirliststore;
 
   GPtrArray *images;
   GPtrArray *videos;
+  GSList *same_images;
+  GSList *same_videos;
   GSList *same_list;
 
   GtkWidget *logtree;
-  GtkListStore *loglist;
+  GtkListStore *logliststore;
 
-  GtkTreeStore *restree;
+  GtkWidget *restree;
+  GtkTreeStore *restreestore;
   GtkTreeSelection *resselect;
-  gchar **resselfiles;
+  file_node **resselfiles;
 } gui_t;
 
 typedef struct
@@ -72,8 +123,7 @@ typedef struct
 
   GtkWidget *butprev, *butnext;
 
-  video_info *ainfo;
-  video_info *binfo;
+  const file_node *afn, *bfn;
 
   gboolean from_tail;
 
@@ -85,7 +135,7 @@ typedef struct
   gui_t *gui;
 } diff_dialog;
 
-static void diff_dialog_new (gui_t *, const gchar *, const gchar *);
+static void diff_dialog_new (gui_t *, const file_node *, const file_node *);
 static void diffdia_ondestroy (GtkWidget *, GdkEvent *, diff_dialog *);
 static void diffdia_onseekchanged (GtkEntry *, diff_dialog *);
 static void diffdia_onheadtail (GtkToggleButton *, diff_dialog *);
@@ -98,6 +148,7 @@ static void progressbar_new (gui_t *);
 
 static void gui_add_cb (GtkWidget *, gui_t *);
 static void gui_find_cb (GtkWidget *, gui_t *);
+static void gui_delsel_cb (GtkWidget *, gui_t *);
 static void gui_pref_cb (GtkWidget *, gui_t *);
 static void gui_help_cb (GtkWidget *, gui_t *);
 
@@ -105,14 +156,6 @@ static void gui_find_step_cb (const find_step *, gui_t *);
 static GSList *gui_append_same_slist (gui_t *, GSList *,
 				      const gchar *, const gchar *,
 				      same_type);
-typedef struct
-{
-  same_type type;
-  GSList *files;
-  GtkTreeRowReference *treerowref;
-} same_node;
-void same_node_free (same_node *);
-void same_list_free (GSList *);
 
 static gui_t gui[1];
 static void gui_destroy (gui_t *);
@@ -129,6 +172,17 @@ static void gui_list_dir (gui_t *, const gchar *);
 static void gui_list_file (gui_t *, const gchar *);
 static void gui_list_link (gui_t *, const gchar *);
 
+static void restree_sel_small_file (same_node *node, gui_t *);
+static void restree_sel_big_file (same_node *node, gui_t *);
+static void restree_sel_small_image (same_node *node, gui_t *);
+static void restree_sel_big_image (same_node *node, gui_t *);
+static void restree_sel_short_video (same_node *node, gui_t *);
+static void restree_sel_long_video (same_node *node, gui_t *);
+static void restree_sel_others (same_node *node, gui_t *);
+
+static void restree_filter_changed (GtkEntry *, gui_t *);
+static void restree_filter_focusin (GtkEntry *, gui_t *);
+static void restree_selcombo_changed (GtkComboBox *, gui_t *);
 static void dirlist_onactivated (GtkTreeView *,
 				 GtkTreePath *,
 				 GtkTreeViewColumn *,
@@ -264,6 +318,15 @@ toolbar_new (gui_t *gui)
 		    G_CALLBACK (gui_find_cb), gui);
   gtk_toolbar_insert (GTK_TOOLBAR (toolbar), gui->but_find, -1);
 
+  img = fd_toolbar_icon_new ("del.png");
+  gui->but_del = gtk_tool_button_new (img, _ ("Delete Selected"));
+  gtk_widget_set_tooltip_text (GTK_WIDGET (gui->but_del),
+			       _ ("Delete the selected files"));
+  g_signal_connect (G_OBJECT (gui->but_del),
+		    "clicked",
+		    G_CALLBACK (gui_delsel_cb), gui);
+  gtk_toolbar_insert (GTK_TOOLBAR (toolbar), gui->but_del, -1);
+
   img = fd_toolbar_icon_new ("pref.png");
   but = gtk_tool_button_new (img, _ ("Preference"));
   gtk_widget_set_tooltip_text (GTK_WIDGET (but),
@@ -293,10 +356,10 @@ gui_log (const gchar *log_domain,
   gui = (gui_t *) user_data;
 
   gdk_threads_enter ();
-  gtk_list_store_append (gui->loglist, itr);
-  gtk_list_store_set (gui->loglist, itr, 0, message, -1);
+  gtk_list_store_append (gui->logliststore, itr);
+  gtk_list_store_set (gui->logliststore, itr, 0, message, -1);
 
-  path = gtk_tree_model_get_path (GTK_TREE_MODEL (gui->loglist),
+  path = gtk_tree_model_get_path (GTK_TREE_MODEL (gui->logliststore),
 				  itr);
   gtk_tree_view_scroll_to_cell (GTK_TREE_VIEW (gui->logtree),
 				path, NULL,
@@ -304,12 +367,12 @@ gui_log (const gchar *log_domain,
 				0.0, 0.0);
   gtk_tree_path_free (path);
 
-  if (gtk_tree_model_iter_n_children (GTK_TREE_MODEL (gui->loglist),
+  if (gtk_tree_model_iter_n_children (GTK_TREE_MODEL (gui->logliststore),
 				      NULL) >= FDUPVES_MAXLOG)
     {
-      gtk_tree_model_get_iter_first (GTK_TREE_MODEL (gui->loglist),
+      gtk_tree_model_get_iter_first (GTK_TREE_MODEL (gui->logliststore),
 				     itr);
-      gtk_list_store_remove (gui->loglist, itr);
+      gtk_list_store_remove (gui->logliststore, itr);
     }
   gdk_threads_leave ();
 }
@@ -331,8 +394,9 @@ gui_vbutcb (GtkWidget *but, gui_t *gui)
 static void
 mainframe_new (gui_t *gui)
 {
-  GtkWidget *hpaned, *vpaned, *vbox, *win, *tree;
+  GtkWidget *hpaned, *vpaned, *vbox, *hbox, *dirview, *win;
   GtkWidget *typebox, *typeibut, *typevbut;
+  GtkWidget *entry, *combo;
   GtkTreeViewColumn *column;
   GtkCellRenderer *renderer;
 
@@ -351,21 +415,21 @@ mainframe_new (gui_t *gui)
 				  GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (win),
 				       GTK_SHADOW_IN);
-  gui->dirlist = gtk_list_store_new (1, G_TYPE_STRING);
-  tree = gtk_tree_view_new_with_model (GTK_TREE_MODEL (gui->dirlist));
-  gtk_container_add (GTK_CONTAINER (win), tree);
-  gtk_widget_set_size_request (tree, 300, 200);
+  gui->dirliststore = gtk_list_store_new (1, G_TYPE_STRING);
+  dirview = gtk_tree_view_new_with_model (GTK_TREE_MODEL (gui->dirliststore));
+  gtk_container_add (GTK_CONTAINER (win), dirview);
+  gtk_widget_set_size_request (dirview, 300, 200);
   gtk_box_pack_start (GTK_BOX (vbox), win, TRUE, TRUE, 2);
 
   renderer = gtk_cell_renderer_text_new ();
   column = gtk_tree_view_column_new_with_attributes
-    (_ ("Path"),
+    (_ ("Source Dir"),
      renderer, "text", 0,
      NULL);
   gtk_tree_view_column_set_resizable (column, TRUE);
-  gtk_tree_view_append_column (GTK_TREE_VIEW (tree), column);
+  gtk_tree_view_append_column (GTK_TREE_VIEW (dirview), column);
 
-  g_signal_connect (G_OBJECT (tree), "row-activated", G_CALLBACK (dirlist_onactivated), gui);
+  g_signal_connect (G_OBJECT (dirview), "row-activated", G_CALLBACK (dirlist_onactivated), gui);
 
   typebox = gtk_hbox_new (TRUE, 2);
   gtk_box_pack_end (GTK_BOX (vbox), typebox, FALSE, FALSE, 2);
@@ -386,8 +450,8 @@ mainframe_new (gui_t *gui)
 				  GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (win),
 				       GTK_SHADOW_IN);
-  gui->loglist = gtk_list_store_new (1, G_TYPE_STRING);
-  gui->logtree = gtk_tree_view_new_with_model (GTK_TREE_MODEL (gui->loglist));
+  gui->logliststore = gtk_list_store_new (1, G_TYPE_STRING);
+  gui->logtree = gtk_tree_view_new_with_model (GTK_TREE_MODEL (gui->logliststore));
   gtk_container_add (GTK_CONTAINER (win), gui->logtree);
   gtk_paned_add2 (GTK_PANED (vpaned), win);
 
@@ -402,34 +466,111 @@ mainframe_new (gui_t *gui)
   g_log_set_handler (NULL, G_LOG_LEVEL_MASK,
 		     gui_log, gui);
 
+  /* result area */
+  vbox = gtk_vbox_new (FALSE, 2);
+  gtk_paned_add2 (GTK_PANED (hpaned), vbox);
+
+  /* result filter */
+  hbox = gtk_hbox_new (FALSE, 2);
+  gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 2);
+  entry = gtk_entry_new ();
+  gtk_box_pack_start (GTK_BOX (hbox), entry, TRUE, TRUE, 2);
+  gtk_entry_set_text (GTK_ENTRY (entry), _ ("filename filter condition"));
+  g_signal_connect (G_OBJECT (entry), "changed",
+		    G_CALLBACK (restree_filter_changed), gui);
+  g_signal_connect (G_OBJECT (entry), "focus-in-event",
+		    G_CALLBACK (restree_filter_focusin), gui);
+
+  combo = gtk_combo_box_new_text ();
+  gtk_box_pack_start (GTK_BOX (hbox), combo, FALSE, FALSE, 2);
+  gtk_combo_box_append_text (GTK_COMBO_BOX (combo),
+			     _ ("Select manual"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (combo),
+			     _ ("select small file"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (combo),
+			     _ ("select big file"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (combo),
+			     _ ("select small image"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (combo),
+			     _ ("select big image"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (combo),
+			     _ ("select short video"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (combo),
+			     _ ("select long video"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (combo),
+			     _ ("select others"));
+  gtk_combo_box_set_active (GTK_COMBO_BOX (combo), 0);
+  g_signal_connect (G_OBJECT (combo), "changed",
+		    G_CALLBACK (restree_selcombo_changed), gui);
+
   /* result tree */
   win = gtk_scrolled_window_new (NULL, NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), win, TRUE, TRUE, 2);
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (win),
 				  GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (win),
 				       GTK_SHADOW_IN);
-  gui->restree = gtk_tree_store_new (1, G_TYPE_STRING);
-  tree = gtk_tree_view_new_with_model (GTK_TREE_MODEL (gui->restree));
-  gtk_container_add (GTK_CONTAINER (win), tree);
+  gui->restreestore = gtk_tree_store_new (6,
+					  G_TYPE_STRING,
+					  G_TYPE_STRING,
+					  G_TYPE_STRING,
+					  G_TYPE_STRING,
+					  G_TYPE_STRING,
+					  G_TYPE_POINTER
+					  );
+  gui->restree = gtk_tree_view_new_with_model (GTK_TREE_MODEL (gui->restreestore));
+  gtk_container_add (GTK_CONTAINER (win), gui->restree);
 
+  /* path */
   renderer = gtk_cell_renderer_text_new ();
   column = gtk_tree_view_column_new_with_attributes
-    (_ ("Result"),
+    (_ ("File Path"),
      renderer, "text", 0,
      NULL);
   gtk_tree_view_column_set_resizable (column, TRUE);
-  gtk_tree_view_append_column (GTK_TREE_VIEW (tree), column);
+  gtk_tree_view_append_column (GTK_TREE_VIEW (gui->restree), column);
+  /* image size */
+  renderer = gtk_cell_renderer_text_new ();
+  column = gtk_tree_view_column_new_with_attributes
+    (_ ("Image Size"),
+     renderer, "text", 1,
+     NULL);
+  gtk_tree_view_column_set_resizable (column, TRUE);
+  gtk_tree_view_append_column (GTK_TREE_VIEW (gui->restree), column);
+  /* file size */
+  renderer = gtk_cell_renderer_text_new ();
+  column = gtk_tree_view_column_new_with_attributes
+    (_ ("File Size"),
+     renderer, "text", 2,
+     NULL);
+  gtk_tree_view_column_set_resizable (column, TRUE);
+  gtk_tree_view_append_column (GTK_TREE_VIEW (gui->restree), column);
+  /* video length */
+  renderer = gtk_cell_renderer_text_new ();
+  column = gtk_tree_view_column_new_with_attributes
+    (_ ("Video Length"),
+     renderer, "text", 3,
+     NULL);
+  gtk_tree_view_column_set_resizable (column, TRUE);
+  gtk_tree_view_append_column (GTK_TREE_VIEW (gui->restree), column);
+  /* format */
+  renderer = gtk_cell_renderer_text_new ();
+  column = gtk_tree_view_column_new_with_attributes
+    (_ ("Format"),
+     renderer, "text", 4,
+     NULL);
+  gtk_tree_view_column_set_resizable (column, TRUE);
+  gtk_tree_view_append_column (GTK_TREE_VIEW (gui->restree), column);
 
-  gtk_widget_add_events (GTK_WIDGET (tree), GDK_BUTTON_PRESS_MASK);
-  g_signal_connect (G_OBJECT (tree), "button-press-event",
+  gtk_widget_add_events (GTK_WIDGET (gui->restree), GDK_BUTTON_PRESS_MASK);
+  g_signal_connect (G_OBJECT (gui->restree), "button-press-event",
 		    G_CALLBACK (restree_onbutpress), gui);
-  g_signal_connect (G_OBJECT (tree), "row-activated",
+  g_signal_connect (G_OBJECT (gui->restree), "row-activated",
 		    G_CALLBACK (restree_onactivated), gui);
-  gui->resselect = gtk_tree_view_get_selection (GTK_TREE_VIEW (tree));
+  gui->resselect = gtk_tree_view_get_selection (GTK_TREE_VIEW (gui->restree));
   gtk_tree_selection_set_mode (gui->resselect, GTK_SELECTION_MULTIPLE);
   g_signal_connect (G_OBJECT (gui->resselect), "changed",
 		    G_CALLBACK (restreesel_onchanged), gui);
-  gtk_paned_add2 (GTK_PANED (hpaned), win);
 }
 
 static void
@@ -444,8 +585,8 @@ gui_add_dir (gui_t *gui, const char *path)
 {
   GtkTreeIter itr[1];
 
-  gtk_list_store_append (gui->dirlist, itr);
-  gtk_list_store_set (gui->dirlist, itr, 0, path, -1);
+  gtk_list_store_append (gui->dirliststore, itr);
+  gtk_list_store_set (gui->dirliststore, itr, 0, path, -1);
 }
 
 static void
@@ -499,20 +640,27 @@ gui_find_thread (gui_t *gui)
   gdk_threads_enter ();
   gtk_widget_set_sensitive (GTK_WIDGET (gui->but_add), FALSE);
   gtk_widget_set_sensitive (GTK_WIDGET (gui->but_find), FALSE);
+  gtk_widget_set_sensitive (GTK_WIDGET (gui->but_del), FALSE);
 
   gtk_progress_bar_set_text (GTK_PROGRESS_BAR (gui->progress), "");
   gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (gui->progress), 0);
 
-  gtk_tree_store_clear (gui->restree);
+  gtk_tree_store_clear (gui->restreestore);
+  if (gui->same_list)
+    {
+      same_list_free (gui->same_list);
+      gui->same_list = NULL;
+    }
   gdk_threads_leave ();
 
   gui->images = g_ptr_array_new_with_free_func (g_free);
   gui->videos = g_ptr_array_new_with_free_func (g_free);
 
-  gtk_tree_model_foreach (GTK_TREE_MODEL (gui->dirlist),
+  gtk_tree_model_foreach (GTK_TREE_MODEL (gui->dirliststore),
 			  (GtkTreeModelForeachFunc) dir_find_item,
 			  gui);
 
+  fimage = 0;
   if (g_ini->proc_image && gui->images->len > 0)
     {
       g_message (_ ("find %d images to process"), gui->images->len);
@@ -520,37 +668,32 @@ gui_find_thread (gui_t *gui)
       find_images (gui->images, (find_step_cb) gui_find_step_cb, gui);
       fimage = g_slist_length (gui->same_list);
       g_message (_ ("find %d groups same images"), fimage);
-
-      gdk_threads_enter ();
-      same_list_free (gui->same_list);
-      gui->same_list = NULL;
-      gdk_threads_leave ();
     }
 
+  fvideo = 0;
   if (g_ini->proc_video && gui->videos->len > 0)
     {
       g_message (_ ("find %d videos to process"), gui->videos->len);
 
       find_videos (gui->videos, (find_step_cb) gui_find_step_cb, gui);
       fvideo = g_slist_length (gui->same_list);
+      fvideo -= fimage;
       g_message (_ ("find %d groups same videos"), fvideo);
-
-      gdk_threads_enter ();
-      same_list_free (gui->same_list);
-      gui->same_list = NULL;
-      gdk_threads_leave ();
     }
 
   g_ptr_array_free (gui->images, TRUE);
   g_ptr_array_free (gui->videos, TRUE);
 
   gdk_threads_enter ();
+  gtk_tree_view_expand_all (GTK_TREE_VIEW (gui->restree));
+
   gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (gui->progress), 0);
   gtk_progress_bar_set_text (GTK_PROGRESS_BAR (gui->progress), "");
 
   /* disable the add/find tool time */
   gtk_widget_set_sensitive (GTK_WIDGET (gui->but_add), TRUE);
   gtk_widget_set_sensitive (GTK_WIDGET (gui->but_find), TRUE);
+  gtk_widget_set_sensitive (GTK_WIDGET (gui->but_del), TRUE);
   gdk_threads_leave ();
 }
 
@@ -737,11 +880,11 @@ dirlist_onactivated (GtkTreeView *tree,
   GtkTreeIter itr[1];
 
   if (gtk_tree_model_get_iter
-      (GTK_TREE_MODEL (gui->dirlist),
+      (GTK_TREE_MODEL (gui->dirliststore),
        itr,
        path))
     {
-      gtk_list_store_remove (gui->dirlist, itr);
+      gtk_list_store_remove (gui->dirliststore, itr);
     }
 }
 
@@ -859,7 +1002,7 @@ restreesel_onchanged (GtkTreeSelection *sel, gui_t *gui)
 
   if (gui->resselfiles)
     {
-      g_strfreev (gui->resselfiles);
+      g_free (gui->resselfiles);
       gui->resselfiles = NULL;
     }
 
@@ -870,15 +1013,15 @@ restreesel_onchanged (GtkTreeSelection *sel, gui_t *gui)
       return;
     }
 
-  gui->resselfiles = g_new0 (gchar *, cnt + 1);
+  gui->resselfiles = g_new0 (file_node *, cnt + 1);
 
   for (i = 0, cur = list; cur; ++ i, cur = g_list_next (cur))
     {
-      gtk_tree_model_get_iter (GTK_TREE_MODEL (gui->restree),
+      gtk_tree_model_get_iter (GTK_TREE_MODEL (gui->restreestore),
 			       itr,
 			       cur->data);
-      gtk_tree_model_get (GTK_TREE_MODEL (gui->restree), itr,
-			  0, gui->resselfiles + i,
+      gtk_tree_model_get (GTK_TREE_MODEL (gui->restreestore), itr,
+			  5, gui->resselfiles + i,
 			  -1);
       gtk_tree_path_free (cur->data);
     }
@@ -892,7 +1035,7 @@ restree_open (GtkMenuItem *item, gui_t *gui)
   gchar *uri;
   GError *err;
 
-  uri = g_filename_to_uri (gui->resselfiles[0], NULL, NULL);
+  uri = g_filename_to_uri (gui->resselfiles[0]->path, NULL, NULL);
   err = NULL;
   gtk_show_uri (NULL, uri, GDK_CURRENT_TIME, &err);
   if (err)
@@ -905,7 +1048,7 @@ restree_open (GtkMenuItem *item, gui_t *gui)
 #else
   gchar *filename;
 
-  filename = g_win32_locale_filename_from_utf8 (gui->resselfiles[0]);
+  filename = g_win32_locale_filename_from_utf8 (gui->resselfiles[0]->path);
   if (filename)
     {
       ShellExecute (NULL, "open", filename, NULL, NULL, SW_SHOW);
@@ -913,7 +1056,7 @@ restree_open (GtkMenuItem *item, gui_t *gui)
     }
   else
     {
-      ShellExecute (NULL, "open", gui->resselfiles[0], NULL, NULL, SW_SHOW);
+      ShellExecute (NULL, "open", gui->resselfiles[0]->path, NULL, NULL, SW_SHOW);
     }
 #endif
 }
@@ -929,10 +1072,10 @@ restree_opendir (GtkMenuItem *item, gui_t *gui)
   gchar *dirname;
 #endif
 
-  dir = g_path_get_dirname (gui->resselfiles[0]);
+  dir = g_path_get_dirname (gui->resselfiles[0]->path);
   if (dir == NULL)
     {
-      g_warning ("get file: %s dirname failed", gui->resselfiles[0]);
+      g_warning ("get file: %s dirname failed", gui->resselfiles[0]->path);
       return;
     }
 
@@ -961,61 +1104,87 @@ restree_opendir (GtkMenuItem *item, gui_t *gui)
       ShellExecute (NULL, "open", dir, NULL, NULL, SW_SHOW);
     }
 #endif
+
   g_free (dir);
 }
 
 static void
-gui_remove_not_exists (gui_t *gui, GtkTreeIter *itr)
+gui_filter_result (gui_t *gui, const gchar *filter)
 {
-  gsize cnt;
-  gchar *file;
-  gboolean has;
-  GtkTreeIter child[1];
+  GtkTreeIter itr[1], itrc[1];
+  GtkTreePath *path;
+  GSList *nodelist, *filelist;
+  same_node *node;
+  file_node *fn;
+  gboolean match;
 
-  gtk_tree_model_iter_children (GTK_TREE_MODEL (gui->restree), child, itr);
-  while (gtk_tree_store_iter_is_valid (gui->restree, child))
+  gtk_tree_store_clear (gui->restreestore);
+
+  for (nodelist = gui->same_list;
+       nodelist != NULL;
+       nodelist = g_slist_next (nodelist))
     {
-      gtk_tree_model_get (GTK_TREE_MODEL (gui->restree), child, 0, &file, -1);
+      node = (same_node *) nodelist->data;
 
-      if (g_file_test (file, G_FILE_TEST_EXISTS) == FALSE)
+      if (node->treerowref)
 	{
-	  gtk_tree_store_remove (gui->restree, child);
+	  gtk_tree_row_reference_free (node->treerowref);
+	  node->treerowref = NULL;
+	}
+      node->show = FALSE;
+
+      if (node->files == NULL)
+	{
+	  continue;
+	}
+
+      if (filter == NULL)
+	{
+	  match = TRUE;
 	}
       else
 	{
-	  gtk_tree_model_iter_next (GTK_TREE_MODEL (gui->restree), child);
+	  match = FALSE;
+
+	  for (filelist = node->files;
+	       filelist != NULL;
+	       filelist = g_slist_next (filelist))
+	    {
+	      fn = filelist->data;
+
+	      if (strstr (fn->path, filter))
+		{
+		  match = TRUE;
+		  break;
+		}
+	    }
 	}
 
-      g_free (file);
-    }
-  gtk_tree_model_get (GTK_TREE_MODEL (gui->restree), itr, 0, &file, -1);
+      if (match)
+	{
+	  gtk_tree_store_append (gui->restreestore, itr, NULL);
+	  fn = node->files->data;
+	  file_node_to_tree_iter (fn, gui->restreestore, itr);
 
-  cnt = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (gui->restree), itr);
-  if (g_file_test (file, G_FILE_TEST_EXISTS))
-    {
-      has = TRUE;
-      ++ cnt;
-    }
-  else
-    {
-      has = FALSE;
-    }
-  g_free (file);
+	  path = gtk_tree_model_get_path (GTK_TREE_MODEL (gui->restreestore),
+					  itr);
+	  node->treerowref = gtk_tree_row_reference_new (GTK_TREE_MODEL (gui->restreestore), path);
+	  gtk_tree_path_free (path);
 
-  if (cnt < 2) /* no same files in this branch */
-    {
-      gtk_tree_store_remove (gui->restree, itr);
-      return;
+	  for (filelist = g_slist_next (node->files);
+	       filelist != NULL;
+	       filelist = g_slist_next (filelist))
+	    {
+	      gtk_tree_store_append (gui->restreestore, itrc, itr);
+	      fn = filelist->data;
+	      file_node_to_tree_iter (fn, gui->restreestore, itrc);
+	    }
+
+	  node->show = TRUE;
+	}
     }
 
-  if (!has) /* parent is exists */
-    {
-      gtk_tree_model_iter_children (GTK_TREE_MODEL (gui->restree), child, itr);
-      gtk_tree_model_get (GTK_TREE_MODEL (gui->restree), child, 0, &file, -1);
-      gtk_tree_store_set (gui->restree, itr, 0, file, -1);
-      g_free (file);
-      gtk_tree_store_remove (gui->restree, child);
-    }
+  gtk_tree_view_expand_all (GTK_TREE_VIEW (gui->restree));
 }
 
 static void
@@ -1023,7 +1192,6 @@ restree_delete (GtkMenuItem *item, gui_t *gui)
 {
   GtkWidget *dia;
   gint i, ret;
-  GtkTreeIter itr[1];
 
   dia = gtk_message_dialog_new (GTK_WINDOW (gui->widget),
 				GTK_DIALOG_DESTROY_WITH_PARENT,
@@ -1039,63 +1207,43 @@ restree_delete (GtkMenuItem *item, gui_t *gui)
     {
       for (i = 0; gui->resselfiles[i]; ++ i)
 	{
-	  g_remove (gui->resselfiles[0]);
+	  g_remove (gui->resselfiles[i]->path);
+	  file_node_free_full (gui->resselfiles[i]);
 	}
     }
 
-  gtk_tree_model_get_iter_first (GTK_TREE_MODEL (gui->restree), itr);
-  while (gtk_tree_store_iter_is_valid (gui->restree, itr))
-    {
-      gui_remove_not_exists (gui, itr);
-      if (gtk_tree_store_iter_is_valid (gui->restree, itr))
-	{
-	  gtk_tree_model_iter_next (GTK_TREE_MODEL (gui->restree), itr);
-	}
-    }
+  gui_filter_result (gui, NULL);
 }
 
 static GtkWidget *
-image2widget (const gchar *file)
+image2widget (const file_node *fn)
 {
-  gchar *desc, *name, *dir;
-  gint width, height;
+  gchar *desc;
   GtkWidget *vbox, *label, *image;
   GdkPixbuf *pixbuf;
-  GdkPixbufFormat *format;
   GError *err;
 
-  format = gdk_pixbuf_get_file_info (file, &width, &height);
-  if (format == NULL)
-    {
-      g_warning ("get image: %s info error", file);
-      return NULL;
-    }
-
-  name = g_path_get_basename (file);
-  dir = g_path_get_dirname (file);
   desc = g_strdup_printf ("Name: %s\n"
 			  "Dir: %s\n"
 			  "size: %d:%d\n"
 			  "format: %s",
-			  name,
-			  dir,
-			  width, height,
-			  gdk_pixbuf_format_get_name (format));
-  g_free (name);
-  g_free (dir);
+			  fn->name,
+			  fn->dir,
+			  fn->width, fn->height,
+			  fn->format);
 
   label = gtk_label_new (desc);
   g_free (desc);
 
   err = NULL;
-  pixbuf = gdk_pixbuf_new_from_file_at_scale (file,
+  pixbuf = gdk_pixbuf_new_from_file_at_scale (fn->path,
 					      g_ini->thumb_size[0],
 					      g_ini->thumb_size[1],
 					      FALSE,
 					      &err);
   if (err)
     {
-      g_warning ("load image: %s error: %s", file, err->message);
+      g_warning ("load image: %s error: %s", fn->path, err->message);
       g_error_free (err);
       g_free (desc);
       return NULL;
@@ -1110,24 +1258,24 @@ image2widget (const gchar *file)
 }
 
 static void
-diff_add_image (diff_dialog *dia, const gchar *afile, const gchar *bfile)
+diff_add_image (diff_dialog *dia, const file_node *afn, const file_node *bfn)
 {
   GtkWidget *aimage, *bimage;
 
   dia->container = gtk_hbox_new (TRUE, 2);
   gtk_box_pack_start (GTK_BOX (dia->content), dia->container, TRUE, TRUE, 0);
 
-  aimage = image2widget (afile);
+  aimage = image2widget (afn);
   gtk_box_pack_start (GTK_BOX (dia->container), aimage, TRUE, TRUE, 0);
 
-  bimage = image2widget (bfile);
+  bimage = image2widget (bfn);
   gtk_box_pack_end (GTK_BOX (dia->container), bimage, TRUE, TRUE, 0);
 }
 
 static GtkWidget *
-video2widget (video_info *info, int seek)
+video2widget (const file_node *fn, int seek)
 {
-  gchar *file, *desc, *tmpfile, tmpname[0x10];
+  gchar *desc, *tmpfile, tmpname[0x10];
   GtkWidget *label, *image, *vbox;
 
   desc = g_strdup_printf ("Name: %s\n"
@@ -1135,22 +1283,19 @@ video2widget (video_info *info, int seek)
 			  "Format %s\n"
 			  "Length: %f\n"
 			  "Size: %d-%d",
-			  info->name,
-			  info->dir,
-			  info->format,
-			  info->length,
-			  info->size[0], info->size[1]);
-
+			  fn->name,
+			  fn->dir,
+			  fn->format,
+			  fn->length,
+			  fn->width, fn->height);
   label = gtk_label_new (desc);
   g_free (desc);
 
   g_snprintf (tmpname, sizeof tmpname, "%d.jpg", rand ());
   tmpfile = g_build_filename (g_get_tmp_dir (), tmpname, NULL);
-  file = g_build_filename (info->dir, info->name, NULL);
-  video_time_screenshot_file (file, seek,
+  video_time_screenshot_file (fn->path, seek,
 			      g_ini->thumb_size[0], g_ini->thumb_size[1],
 			      tmpfile);
-  g_free (file);
   image = gtk_image_new_from_file (tmpfile);
   g_free (tmpfile);
 
@@ -1174,20 +1319,20 @@ diffdia_refresh_video_pic (diff_dialog *dia)
       gtk_container_remove (GTK_CONTAINER (dia->container), cur->data);
     }
 
-  rate = (int) ((dia->ainfo->length < dia->binfo->length ?
-		 dia->ainfo->length:
-		 dia->binfo->length) / (g_ini->compare_count + 1));
+  rate = (int) ((dia->afn->length < dia->bfn->length ?
+		 dia->afn->length:
+		 dia->bfn->length) / (g_ini->compare_count + 1));
 
   seek = dia->from_tail ?
-    (int) (dia->ainfo->length - rate * dia->index) :
+    (int) (dia->afn->length - rate * dia->index) :
     rate * dia->index;
-  avideo = video2widget (dia->ainfo, seek);
+  avideo = video2widget (dia->afn, seek);
   gtk_box_pack_start (GTK_BOX (dia->container), avideo, TRUE, TRUE, 0);
 
   seek = dia->from_tail ?
-    (int) (dia->binfo->length - rate * dia->index) :
+    (int) (dia->bfn->length - rate * dia->index) :
     rate * dia->index;
-  bvideo = video2widget (dia->binfo, seek);
+  bvideo = video2widget (dia->bfn, seek);
   gtk_box_pack_end (GTK_BOX (dia->container), bvideo, TRUE, TRUE, 0);
 
   if (dia->index <= 1)
@@ -1210,25 +1355,14 @@ diffdia_refresh_video_pic (diff_dialog *dia)
 }
 
 static void
-diff_add_video (diff_dialog *dia, const gchar *afile, const gchar *bfile)
+diff_add_video (diff_dialog *dia, const file_node *afn, const file_node *bfn)
 {
   GtkWidget *hbox, *hbox2;
   GtkWidget *entry, *label, *headortail;
   gchar count[10];
 
-  dia->ainfo = video_get_info (afile);
-  if (dia->ainfo == NULL)
-    {
-      g_warning ("get video: %s info failed", afile);
-      return;
-    }
-  dia->binfo = video_get_info (bfile);
-  if (dia->binfo == NULL)
-    {
-      g_warning ("get video: %s info failed", bfile);
-      video_info_free (dia->ainfo);
-      return;
-    }
+  dia->afn = afn;
+  dia->bfn = bfn;
 
   /* screenshot */
   dia->container = gtk_hbox_new (TRUE, 2);
@@ -1274,7 +1408,7 @@ restree_diff (GtkMenuItem *item, gui_t *gui)
 }
 
 static void
-diff_dialog_new (gui_t *gui, const gchar *afile, const gchar *bfile)
+diff_dialog_new (gui_t *gui, const file_node *afn, const file_node *bfn)
 {
   diff_dialog *diffdia;
 
@@ -1296,13 +1430,13 @@ diff_dialog_new (gui_t *gui, const gchar *afile, const gchar *bfile)
   g_signal_connect (G_OBJECT (diffdia->dialog), "close",
 		    G_CALLBACK (diffdia_ondestroy), diffdia);
 
-  if (is_image (afile) && is_image (bfile))
+  if (afn->type == FD_IMAGE && bfn->type == FD_IMAGE)
     {
-      diff_add_image (diffdia, afile, bfile);
+      diff_add_image (diffdia, afn, bfn);
     }
-  else if (is_video (afile) && is_video (bfile))
+  else if (afn->type == FD_VIDEO && bfn->type == FD_VIDEO)
     {
-      diff_add_video (diffdia, afile, bfile);
+      diff_add_video (diffdia, afn, bfn);
     }
   else
     {
@@ -1312,7 +1446,7 @@ diff_dialog_new (gui_t *gui, const gchar *afile, const gchar *bfile)
       desc = g_strdup_printf ("file type are not same, can't show diff\n"
 			      "file 1: %s\n"
 			      "file 2: %s\n",
-			      afile, bfile);
+			      afn->path, bfn->path);
       label = gtk_label_new (desc);
       g_free (desc);
       gtk_box_pack_start (GTK_BOX (diffdia->content), label, TRUE, FALSE, 2);
@@ -1340,15 +1474,6 @@ static void
 diffdia_ondestroy (GtkWidget *dia, GdkEvent *ev, diff_dialog *dialog)
 {
   gtk_widget_destroy (dialog->dialog);
-
-  if (dialog->ainfo)
-    {
-      video_info_free (dialog->ainfo);
-    }
-  if (dialog->binfo)
-    {
-      video_info_free (dialog->binfo);
-    }
   g_free (dialog);
 }
 
@@ -1415,6 +1540,7 @@ gui_append_same_slist (gui_t *gui, GSList *slist,
 {
   GSList *cur, *fslist;
   same_node *node;
+  file_node *fn, *fn2;
   gboolean afind, bfind;
   GtkTreeIter itr[1], itrc[1];
   GtkTreePath *path;
@@ -1431,11 +1557,13 @@ gui_append_same_slist (gui_t *gui, GSList *slist,
       afind = bfind = FALSE;
       for (fslist = node->files; fslist; fslist = g_slist_next (fslist))
 	{
-	  if (strcmp (fslist->data, afile) == 0)
+	  fn = fslist->data;
+
+	  if (strcmp (fn->path, afile) == 0)
 	    {
 	      afind = TRUE;
 	    }
-	  else if (strcmp (fslist->data, bfile) == 0)
+	  else if (strcmp (fn->path, bfile) == 0)
 	    {
 	      bfind = TRUE;
 	    }
@@ -1447,28 +1575,40 @@ gui_append_same_slist (gui_t *gui, GSList *slist,
 	}
       else if (afind)
 	{
-	  node->files = g_slist_append (node->files, (gpointer) bfile);
+	  fn = file_node_new (node,
+			      bfile,
+			      type == FD_SAME_IMAGE ?
+			      FD_IMAGE : FD_VIDEO);
 
 	  gdk_threads_enter ();
-	  path = gtk_tree_row_reference_get_path (node->treerowref);
-	  gtk_tree_model_get_iter (GTK_TREE_MODEL (gui->restree), itr, path);
-	  gtk_tree_store_append (gui->restree, itrc, itr);
-	  gtk_tree_store_set (gui->restree, itrc, 0, bfile, -1);
-	  gtk_tree_path_free (path);
+	  if (node->show)
+	    {
+	      path = gtk_tree_row_reference_get_path (node->treerowref);
+	      gtk_tree_model_get_iter (GTK_TREE_MODEL (gui->restreestore), itr, path);
+	      gtk_tree_store_append (gui->restreestore, itrc, itr);
+	      file_node_to_tree_iter (fn, gui->restreestore, itrc);
+	      gtk_tree_path_free (path);
+	    }
 	  gdk_threads_leave ();
 
 	  return slist;
 	}
       else if (bfind)
 	{
-	  node->files = g_slist_append (node->files, (gpointer) afile);
+	  fn = file_node_new (node,
+			      afile,
+			      type == FD_SAME_IMAGE?
+			      FD_IMAGE : FD_VIDEO);
 
 	  gdk_threads_enter ();
-	  path = gtk_tree_row_reference_get_path (node->treerowref);
-	  gtk_tree_model_get_iter (GTK_TREE_MODEL (gui->restree), itr, path);
-	  gtk_tree_store_append (gui->restree, itrc, itr);
-	  gtk_tree_store_set (gui->restree, itrc, 0, afile, -1);
-	  gtk_tree_path_free (path);
+	  if (node->show)
+	    {
+	      path = gtk_tree_row_reference_get_path (node->treerowref);
+	      gtk_tree_model_get_iter (GTK_TREE_MODEL (gui->restreestore), itr, path);
+	      gtk_tree_store_append (gui->restreestore, itrc, itr);
+	      file_node_to_tree_iter (fn, gui->restreestore, itrc);
+	      gtk_tree_path_free (path);
+	    }
 	  gdk_threads_leave ();
 
 	  return slist;
@@ -1479,16 +1619,24 @@ gui_append_same_slist (gui_t *gui, GSList *slist,
   g_return_val_if_fail (node, slist);
 
   node->type = type;
-  node->files = g_slist_append (node->files, (gpointer) afile);
-  node->files = g_slist_append (node->files, (gpointer) bfile);
+  fn = file_node_new (node,
+		      afile,
+		      type == FD_SAME_IMAGE ?
+		      FD_IMAGE : FD_VIDEO);
+  fn2 = file_node_new (node,
+		       bfile,
+		       type == FD_SAME_IMAGE ?
+		       FD_IMAGE : FD_VIDEO);
 
   gdk_threads_enter ();
-  gtk_tree_store_append (gui->restree, itr, NULL);
-  gtk_tree_store_set (gui->restree, itr, 0, afile, -1);
-  path = gtk_tree_model_get_path (GTK_TREE_MODEL (gui->restree), itr);
-  node->treerowref = gtk_tree_row_reference_new (GTK_TREE_MODEL (gui->restree), path);
-  gtk_tree_store_append (gui->restree, itrc, itr);
-  gtk_tree_store_set (gui->restree, itrc, 0, bfile, -1);
+  gtk_tree_store_append (gui->restreestore, itr, NULL);
+  file_node_to_tree_iter (fn, gui->restreestore, itr);
+  path = gtk_tree_model_get_path (GTK_TREE_MODEL (gui->restreestore), itr);
+  node->treerowref = gtk_tree_row_reference_new (GTK_TREE_MODEL (gui->restreestore), path);
+  gtk_tree_path_free (path);
+  gtk_tree_store_append (gui->restreestore, itrc, itr);
+  file_node_to_tree_iter (fn2, gui->restreestore, itrc);
+  node->show = TRUE;
   gdk_threads_leave ();
 
   return g_slist_append (slist, node);
@@ -1497,7 +1645,12 @@ gui_append_same_slist (gui_t *gui, GSList *slist,
 void
 same_node_free (same_node *node)
 {
-  gtk_tree_row_reference_free (node->treerowref);
+  if (node->treerowref)
+    {
+      gtk_tree_row_reference_free (node->treerowref);
+      node->treerowref = NULL;
+    }
+  g_slist_foreach (node->files, (GFunc) file_node_free, NULL);
   g_slist_free (node->files);
   g_free (node);
 }
@@ -1507,4 +1660,426 @@ same_list_free (GSList *list)
 {
   g_slist_foreach (list, (GFunc) same_node_free, NULL);
   g_slist_free (list);
+}
+
+static void
+restree_filter_changed (GtkEntry *entry, gui_t *gui)
+{
+  gui_filter_result (gui, gtk_entry_get_text (entry));
+}
+
+static void
+restree_filter_focusin (GtkEntry *entry, gui_t *gui)
+{
+  gtk_entry_set_text (GTK_ENTRY (entry), "");
+  g_signal_handlers_disconnect_by_func (G_OBJECT (entry),
+					G_CALLBACK (restree_filter_focusin), gui);
+}
+
+static void
+restree_selcombo_changed (GtkComboBox *comtext, gui_t *gui)
+{
+  gint id;
+
+  id = gtk_combo_box_get_active (comtext);
+  switch (id)
+    {
+    case 0:
+      break;
+
+    case 1:
+      g_slist_foreach (gui->same_list, (GFunc) restree_sel_small_file, gui);
+      break;
+    case 2:
+      g_slist_foreach (gui->same_list, (GFunc) restree_sel_big_file, gui);
+      break;
+    case 3:
+      g_slist_foreach (gui->same_list, (GFunc) restree_sel_small_image, gui);
+      break;
+    case 4:
+      g_slist_foreach (gui->same_list, (GFunc) restree_sel_big_image, gui);
+      break;
+    case 5:
+      g_slist_foreach (gui->same_list, (GFunc) restree_sel_short_video, gui);
+      break;
+    case 6:
+      g_slist_foreach (gui->same_list, (GFunc) restree_sel_long_video, gui);
+      break;
+    case 7:
+      g_slist_foreach (gui->same_list, (GFunc) restree_sel_others, gui);
+      break;
+
+    default:
+      break;
+    }
+}
+
+static void
+gui_delsel_cb (GtkWidget *but, gui_t *gui)
+{
+  if (gui->resselfiles && gui->resselfiles[0])
+    {
+      restree_delete (NULL, gui);
+    }
+}
+
+static file_node *
+file_node_new (same_node *node, const gchar *path, gint type)
+{
+  file_node *fn;
+#ifdef WIN32
+  struct _stat32 buf[1];
+#else
+  struct stat buf[1];
+#endif
+
+  fn = g_malloc0 (sizeof (file_node));
+  g_return_val_if_fail (fn, NULL);
+
+  fn->path = g_strdup (path);
+  fn->name = g_path_get_basename (path);
+  fn->dir = g_path_get_dirname (path);
+
+  if (g_stat (path, buf) == 0)
+    {
+      fn->size = buf->st_size;
+    }
+
+  fn->type = type;
+
+  if (type == FD_IMAGE)
+    {
+      GdkPixbufFormat *format;
+
+      format = gdk_pixbuf_get_file_info (path,
+					 &fn->width, &fn->height);
+      if (format)
+	{
+	  fn->format = gdk_pixbuf_format_get_name (format);
+	}
+
+    }
+  else if (type == FD_VIDEO)
+    {
+      video_info *info;
+
+      info = video_get_info (path);
+      if (info)
+	{
+	  fn->width = info->size[0];
+	  fn->height = info->size[1];
+	  fn->length = info->length;
+	  fn->format = g_strdup (info->format);
+	  video_info_free (info);
+	}
+    }
+
+  fn->node = node;
+  node->files = g_slist_append (node->files, fn);
+
+  return fn;
+}
+
+static void
+file_node_free (file_node *fn)
+{
+  g_free (fn->path);
+  g_free (fn->name);
+  g_free (fn->dir);
+  g_free (fn->format);
+  g_free (fn);
+}
+
+static void
+file_node_free_full (file_node *fn)
+{
+  same_node *node;
+
+  node = fn->node;
+
+  file_node_free (fn);
+  node->files = g_slist_remove (node->files, fn);
+
+  if (g_slist_length (node->files) == 1)
+    {
+      file_node_free_full (node->files->data);
+    }
+}
+
+static void
+file_node_to_tree_iter (file_node *fn, GtkTreeStore *store, GtkTreeIter *itr)
+{
+  gchar isizestr[0x100], vlenstr[0x100], *fsizestr;
+
+  g_snprintf (isizestr, sizeof isizestr, "%u:%u",
+	      fn->width, fn->height);
+  g_snprintf (vlenstr, sizeof vlenstr, "%f",
+	      fn->length);
+#if GLIB_CHECK_VERSION (2, 30, 0)
+  fsizestr = g_format_size (fn->size);
+#else
+  fsizestr = g_strdup_printf ("%d", fn->size);
+#endif
+
+  gtk_tree_store_set (store, itr,
+		      0, fn->path,
+		      1, isizestr,
+		      2, fsizestr,
+		      3, vlenstr,
+		      4, fn->format,
+		      5, fn,
+		      -1);
+  g_free (fsizestr);
+}
+
+static void
+restree_select_rowref_id (gui_t *gui, GtkTreeRowReference *ref, gint id)
+{
+  GtkTreePath *path;
+
+  path = gtk_tree_row_reference_get_path (ref);
+  if (id > 0)
+    {
+      gtk_tree_path_down (path);
+      while (-- id)
+	{
+	  gtk_tree_path_next (path);
+	}
+    }
+  gtk_tree_selection_select_path (gui->resselect, path);
+}
+
+static void
+restree_unselect_rowref_id (gui_t *gui, GtkTreeRowReference *ref, gint id)
+{
+  GtkTreePath *path;
+
+  path = gtk_tree_row_reference_get_path (ref);
+  if (id > 0)
+    {
+      gtk_tree_path_down (path);
+      while (-- id)
+	{
+	  gtk_tree_path_next (path);
+	}
+    }
+  gtk_tree_selection_unselect_path (gui->resselect, path);
+}
+
+static void
+restree_sel_small_file (same_node *node, gui_t *gui)
+{
+  GSList *slist;
+  file_node *fn, *sfn;
+
+  if (!node->show)
+    {
+      return;
+    }
+
+  for (sfn = node->files->data, slist = node->files;
+       slist != NULL;
+       slist = g_slist_next (slist))
+    {
+      fn = slist->data;
+
+      fn->selected = FALSE;
+      restree_unselect_rowref_id (gui, node->treerowref,
+				  g_slist_index (node->files, fn));
+      if (fn->size < sfn->size)
+	{
+	  sfn = fn;
+	}
+    }
+
+  sfn->selected = TRUE;
+  restree_select_rowref_id (gui, node->treerowref,
+			    g_slist_index (node->files, sfn));
+}
+
+static void
+restree_sel_big_file (same_node *node, gui_t *gui)
+{
+  GSList *slist;
+  file_node *fn, *sfn;
+
+  if (!node->show)
+    {
+      return;
+    }
+
+  for (sfn = node->files->data, slist = node->files;
+       slist != NULL;
+       slist = g_slist_next (slist))
+    {
+      fn = slist->data;
+
+      fn->selected = FALSE;
+      restree_unselect_rowref_id (gui, node->treerowref,
+				  g_slist_index (node->files, fn));
+      if (fn->size > sfn->size)
+	{
+	  sfn = fn;
+	}
+    }
+
+  sfn->selected = TRUE;
+  restree_select_rowref_id (gui, node->treerowref,
+			    g_slist_index (node->files, sfn));
+}
+
+static void
+restree_sel_small_image (same_node *node, gui_t *gui)
+{
+  GSList *slist;
+  file_node *fn, *sfn;
+
+  if (!node->show)
+    {
+      return;
+    }
+
+  for (sfn = node->files->data, slist = node->files;
+       slist != NULL;
+       slist = g_slist_next (slist))
+    {
+      fn = slist->data;
+
+      fn->selected = FALSE;
+      restree_unselect_rowref_id (gui, node->treerowref,
+				  g_slist_index (node->files, fn));
+      if (fn->width * fn->height < sfn->width * sfn->height)
+	{
+	  sfn = fn;
+	}
+    }
+
+  sfn->selected = TRUE;
+  restree_select_rowref_id (gui, node->treerowref,
+			    g_slist_index (node->files, sfn));
+}
+
+static void
+restree_sel_big_image (same_node *node, gui_t *gui)
+{
+  GSList *slist;
+  file_node *fn, *sfn;
+
+  if (!node->show)
+    {
+      return;
+    }
+
+  for (sfn = node->files->data, slist = node->files;
+       slist != NULL;
+       slist = g_slist_next (slist))
+    {
+      fn = slist->data;
+
+      fn->selected = FALSE;
+      restree_unselect_rowref_id (gui, node->treerowref,
+				  g_slist_index (node->files, fn));
+      if (fn->width * fn->height > sfn->width * sfn->height)
+	{
+	  sfn = fn;
+	}
+    }
+
+  sfn->selected = TRUE;
+  restree_select_rowref_id (gui, node->treerowref,
+			    g_slist_index (node->files, sfn));
+}
+
+static void
+restree_sel_short_video (same_node *node, gui_t *gui)
+{
+  GSList *slist;
+  file_node *fn, *sfn;
+
+  if (!node->show)
+    {
+      return;
+    }
+
+  for (sfn = node->files->data, slist = node->files;
+       slist != NULL;
+       slist = g_slist_next (slist))
+    {
+      fn = slist->data;
+
+      fn->selected = FALSE;
+      restree_unselect_rowref_id (gui, node->treerowref,
+				  g_slist_index (node->files, fn));
+      if (fn->length < sfn->length)
+	{
+	  sfn = fn;
+	}
+    }
+
+  sfn->selected = TRUE;
+  restree_select_rowref_id (gui, node->treerowref,
+			    g_slist_index (node->files, sfn));
+}
+
+static void
+restree_sel_long_video (same_node *node, gui_t *gui)
+{
+  GSList *slist;
+  file_node *fn, *sfn;
+
+  if (!node->show)
+    {
+      return;
+    }
+
+  for (sfn = node->files->data, slist = node->files;
+       slist != NULL;
+       slist = g_slist_next (slist))
+    {
+      fn = slist->data;
+
+      fn->selected = FALSE;
+      restree_unselect_rowref_id (gui, node->treerowref,
+				  g_slist_index (node->files, fn));
+      if (fn->length > sfn->length)
+	{
+	  sfn = fn;
+	}
+    }
+
+  sfn->selected = TRUE;
+  restree_select_rowref_id (gui, node->treerowref,
+			    g_slist_index (node->files, sfn));
+}
+
+static void
+restree_sel_others (same_node *node, gui_t *gui)
+{
+  GSList *slist;
+  file_node *fn;
+
+  if (!node->show)
+    {
+      return;
+    }
+
+  for (slist = node->files;
+       slist != NULL;
+       slist = g_slist_next (slist))
+    {
+      fn = slist->data;
+
+      if (fn->selected)
+	{
+	  fn->selected = FALSE;
+	  restree_unselect_rowref_id (gui, node->treerowref,
+				      g_slist_index (node->files, fn));
+	}
+      else
+	{
+	  fn->selected = TRUE;
+	  restree_select_rowref_id (gui, node->treerowref,
+				    g_slist_index (node->files, fn));
+	}
+    }
 }

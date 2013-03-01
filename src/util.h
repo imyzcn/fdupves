@@ -49,6 +49,9 @@
 
 #define _(S)    gettext (S)
 
+#define FD_IMAGE 1
+#define FD_VIDEO 2
+
 gchar * fd_realpath (const gchar *);
 
 gchar * fd_install_path ();
