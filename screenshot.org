@@ -1,0 +1,20 @@
+fdupves - find duplicate video/image files - Screenshot
+
+* Startup
+[[./images/fdupves-Klara.0.1-startup.png]]
+
+* Add Source Dir
+[[./images/fdupves-Klara.0.1-add.png]]
+
+* Find Same File
+[[./images/fdupves-Klara.0.1-find.png]]
+
+* Right Click when selected 1 file
+[[./images/fdupves-Klara.0.1-1rightclick.png]]
+
+* Right Click when selected 2 files
+[[./images/fdupves-Klara.0.1-2rightclick.png]]
+
+* Right Click when selected multiple files
+
+[[./images/fdupves-Klara.0.1-mrightclick.png]]

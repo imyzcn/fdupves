@@ -1,0 +1,25 @@
+fdupves - find duplicate video/image files
+
+* Description
+
+Searches the given path for duplicate video or image files. Such files are found by Perceptual Hash of every file.
+
+* Requirement
+
+ - Gtk2: http://www.gtk.org/
+ - FFmpeg: http://ffmpeg.org/
+
+* Downloads
+
+** [[https://code.google.com/p/fdupves/downloads/list][Windows]]
+** Linux
+ - [[https://aur.archlinux.org/packages/fdupves-git/][ArchLinux AUR]]
+** [[http://github.com/naihe2010/fdupves][Source]]
+
+* [[./documentation.html][Documentation]]
+
+* [[./screenshot.html][Screenshot]]
+* Authors
+
+ - Email: [[mailto:naihe2010@126.com][naihe2010 at 126.com]]
+ - Weibo: [[http://weibo.com/naihe2010/][naihe2010 at weibo.com]]
