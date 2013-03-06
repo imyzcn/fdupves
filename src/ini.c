@@ -103,7 +103,8 @@ ini_new ()
 
   ini->compare_count = 4;
 
-  ini->hash_distance = 2;
+  ini->same_image_distance = 1;
+  ini->same_video_distance = 8;
 
   ini->hash_size[0] = 8;
   ini->hash_size[1] = 8;

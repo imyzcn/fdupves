@@ -93,7 +93,7 @@ find_images (GPtrArray *ptr, find_step_cb cb, gpointer arg)
       for (j = i + 1; j < ptr->len; ++ j)
 	{
 	  dist = hash_cmp (hashs[i], hashs[j]);
-	  if (dist < g_ini->hash_distance)
+	  if (dist < g_ini->same_image_distance)
 	    {
 	      step->found = TRUE;
 	      step->afile = g_ptr_array_index (ptr, i);
@@ -170,7 +170,7 @@ find_videos (GPtrArray *ptr, find_step_cb cb, gpointer arg)
 		}
 	      dist = hash_cmp (afile->head->hash,
 			       bfile->head->hash);
-	      if (dist < g_ini->hash_distance)
+	      if (dist < g_ini->same_video_distance)
 		{
 		  if (is_video_same (afile, bfile, FALSE))
 		    {
@@ -198,7 +198,7 @@ find_videos (GPtrArray *ptr, find_step_cb cb, gpointer arg)
 		}
 	      dist = hash_cmp (afile->tail->hash,
 			       bfile->tail->hash);
-	      if (dist < g_ini->hash_distance)
+	      if (dist < g_ini->same_video_distance)
 		{
 		  if (is_video_same (afile, bfile, TRUE))
 		    {
@@ -297,7 +297,7 @@ is_video_same (struct st_file *afile, struct st_file *bfile, gboolean tail)
     {
       hasha = video_time_hash (afile->file, seeka[i]);
       hashb = video_time_hash (bfile->file, seekb[i]);
-      if (hash_cmp (hasha, hashb) >= g_ini->hash_distance)
+      if (hash_cmp (hasha, hashb) >= g_ini->same_video_distance)
 	{
 	  return FALSE;
 	}

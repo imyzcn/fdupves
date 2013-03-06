@@ -42,7 +42,8 @@ typedef struct
 
   gint compare_count;
 
-  gint hash_distance;
+  gint same_video_distance;
+  gint same_image_distance;
 
   gint hash_size[2];
 
