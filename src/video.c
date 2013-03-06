@@ -114,11 +114,19 @@ video_time_screenshot (const char *file, int time,
   AVCodec *codec = NULL;
   AVFrame *frame,*frame_rgb;
   AVPacket packet;
+  struct SwsContext *img_convert_ctx = NULL;
   int s, i, bytes, finished;
   int64_t seek_target;
 
   if (avformat_open_input (&format_ctx, file, NULL, NULL) != 0)
     {
+      return -1;
+    }
+
+  if (avformat_find_stream_info (format_ctx, NULL) < 0)
+    {
+      g_warning ("could not find codec parameters: %s", file);
+      avformat_close_input (&format_ctx);
       return -1;
     }
 
@@ -134,6 +142,7 @@ video_time_screenshot (const char *file, int time,
 
   if (s == -1)
     {
+      g_warning ("could not find video stream: %s", file);
       avformat_close_input (&format_ctx);
       return -1;
     }
@@ -193,39 +202,57 @@ video_time_screenshot (const char *file, int time,
 
   while (av_read_frame (format_ctx, &packet) >= 0)
     {
-      if (packet.stream_index == s)
+      if (packet.stream_index != s)
 	{
-	  avcodec_decode_video2 (codec_ctx, frame, &finished, &packet);
-	  if (finished) {
-	    struct SwsContext *img_convert_ctx = NULL;
-	    img_convert_ctx =
-	      sws_getCachedContext (img_convert_ctx,
-				    codec_ctx->width, codec_ctx->height,
-				    codec_ctx->pix_fmt,
-				    width, height,
-				    PIX_FMT_RGB24, SWS_FAST_BILINEAR,
-				    NULL, NULL, NULL);
-	    if (!img_convert_ctx) {
-	      g_warning ("Cannot initialize sws conversion context");
-	      av_free_packet(&packet);
-	      avcodec_free_frame (&frame);
-	      avcodec_free_frame (&frame_rgb);
-	      avcodec_close (codec_ctx);
-	      avformat_close_input (&format_ctx);
-	      return -1;
-	    }
-	    sws_scale (img_convert_ctx,
-		       (const uint8_t * const *) frame->data, frame->linesize,
-		       0, codec_ctx->height,
-		       frame_rgb->data, frame_rgb->linesize);
-	    sws_freeContext (img_convert_ctx);
-	    av_free_packet(&packet);
-	    break;
-	  } /* end if (finished) */
-	} /* end if (packet.stream_index */
+	  av_free_packet (&packet);
+	  continue;
+	}
 
+      avcodec_decode_video2 (codec_ctx, frame, &finished, &packet);
+      if (!finished) {
+	av_free_packet (&packet);
+	continue;
+      }
+
+      if (packet.dts != AV_NOPTS_VALUE)
+	{
+	  if (packet.dts < seek_target)
+	    {
+	      av_free_packet (&packet);
+	      continue;
+	    }
+	}
+      else if (packet.pts != AV_NOPTS_VALUE)
+	{
+	  if (packet.pts < seek_target)
+	    {
+	      av_free_packet (&packet);
+	      continue;
+	    }
+	}
+
+      img_convert_ctx =
+	sws_getCachedContext (img_convert_ctx,
+			      codec_ctx->width, codec_ctx->height,
+			      codec_ctx->pix_fmt,
+			      width, height,
+			      PIX_FMT_RGB24, SWS_FAST_BILINEAR,
+			      NULL, NULL, NULL);
+      if (!img_convert_ctx) {
+	g_warning ("Cannot initialize sws conversion context");
+	av_free_packet(&packet);
+	bytes = -1;
+	break;
+      }
+
+      sws_scale (img_convert_ctx,
+		 (const uint8_t * const *) frame->data, frame->linesize,
+		 0, codec_ctx->height,
+		 frame_rgb->data, frame_rgb->linesize);
+      sws_freeContext (img_convert_ctx);
       av_free_packet(&packet);
-    } /* end while */
+      break;
+    }
 
   av_free(frame_rgb);
   av_free(frame);
