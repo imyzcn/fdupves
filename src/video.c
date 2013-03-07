@@ -120,6 +120,7 @@ video_time_screenshot (const char *file, int time,
 
   if (avformat_open_input (&format_ctx, file, NULL, NULL) != 0)
     {
+      g_warning ("could not open: %s", file);
       return -1;
     }
 
@@ -154,7 +155,7 @@ video_time_screenshot (const char *file, int time,
   if (codec == NULL)
     {
       avformat_close_input (&format_ctx);
-      g_warning ("Unsupported codec!");
+      g_warning ("Unsupported codec: %s", file);
       return -1;
     }
 

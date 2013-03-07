@@ -136,7 +136,8 @@ typedef struct
 } diff_dialog;
 
 static void diff_dialog_new (gui_t *, const file_node *, const file_node *);
-static void diffdia_ondestroy (GtkWidget *, GdkEvent *, diff_dialog *);
+static void diffdia_onclose (GtkWidget *, diff_dialog *);
+static void diffdia_onresponse (GtkWidget *, gint, diff_dialog *);
 static void diffdia_onseekchanged (GtkEntry *, diff_dialog *);
 static void diffdia_onheadtail (GtkToggleButton *, diff_dialog *);
 static void diffdia_onnext (GtkWidget *, diff_dialog *);
@@ -820,18 +821,35 @@ gui_list_file (gui_t *gui, const gchar *path)
 {
   gchar *p;
 
-  if (g_ini->proc_image
-      && is_image (path))
+  if (is_image (path))
     {
-      p = g_strdup (path);
-      g_ptr_array_add (gui->images, p);
+      if (g_ini->proc_image)
+	{
+	  p = g_strdup (path);
+	  g_ptr_array_add (gui->images, p);
+	  return;
+	}
     }
 
-  if (g_ini->proc_video
-      && is_video (path))
+  else if (is_video (path))
     {
-      p = g_strdup (path);
-      g_ptr_array_add (gui->videos, p);
+      if (g_ini->proc_video)
+	{
+	  p = g_strdup (path);
+	  g_ptr_array_add (gui->videos, p);
+	  return;
+	}
+    }
+
+  else
+    {
+      if (g_ini->proc_other)
+	{
+	}
+      else
+	{
+	  g_debug ("%s is not image/video, skipped", path);
+	}
     }
 }
 
@@ -1426,9 +1444,9 @@ diff_dialog_new (gui_t *gui, const file_node *afn, const file_node *bfn)
   diffdia->content = gtk_dialog_get_content_area (GTK_DIALOG (diffdia->dialog));
 
   g_signal_connect (G_OBJECT (diffdia->dialog), "response",
-		    G_CALLBACK (diffdia_ondestroy), diffdia);
+		    G_CALLBACK (diffdia_onresponse), diffdia);
   g_signal_connect (G_OBJECT (diffdia->dialog), "close",
-		    G_CALLBACK (diffdia_ondestroy), diffdia);
+		    G_CALLBACK (diffdia_onclose), diffdia);
 
   if (afn->type == FD_IMAGE && bfn->type == FD_IMAGE)
     {
@@ -1471,7 +1489,14 @@ diffdia_onprev (GtkWidget *but, diff_dialog *dialog)
 }
 
 static void
-diffdia_ondestroy (GtkWidget *dia, GdkEvent *ev, diff_dialog *dialog)
+diffdia_onclose (GtkWidget *dia, diff_dialog *dialog)
+{
+  gtk_widget_destroy (dialog->dialog);
+  g_free (dialog);
+}
+
+static void
+diffdia_onresponse (GtkWidget *dia, gint res, diff_dialog *dialog)
 {
   gtk_widget_destroy (dialog->dialog);
   g_free (dialog);

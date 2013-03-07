@@ -95,16 +95,19 @@ fd_install_path ()
 int
 is_image (const char *path)
 {
-  int i, plen, slen;
+  int i;
   const char *p, *s;
 
-  plen = strlen (path);
+  p = strrchr (path, '.');
+  if (p == NULL)
+    {
+      return 0;
+    }
+
   for (i = 0; g_ini->image_suffix[i][0]; ++ i)
     {
       s = g_ini->image_suffix[i];
-      slen = strlen (s);
-      p = (gchar *) path + plen - slen;
-      if (strcmp (p, s) == 0)
+      if (g_ascii_strcasecmp (p, s) == 0)
 	{
 	  return 1;
 	}
@@ -116,16 +119,19 @@ is_image (const char *path)
 int
 is_video (const gchar *path)
 {
-  int i, plen, slen;
+  int i;
   const char *p, *s;
 
-  plen = strlen (path);
+  p = strrchr (path, '.');
+  if (p == NULL)
+    {
+      return 0;
+    }
+
   for (i = 0; g_ini->video_suffix[i][0]; ++ i)
     {
       s = g_ini->video_suffix[i];
-      slen = strlen (s);
-      p = path + plen - slen;
-      if (strcmp (p, s) == 0)
+      if (g_ascii_strcasecmp (p, s) == 0)
 	{
 	  return 1;
 	}

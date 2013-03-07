@@ -40,6 +40,8 @@ typedef struct
   gboolean proc_video;
   gchar video_suffix[0x100][6];
 
+  gboolean proc_other;
+
   gint compare_count;
 
   gint same_video_distance;

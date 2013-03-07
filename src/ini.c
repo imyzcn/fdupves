@@ -59,15 +59,21 @@ ini_new ()
   const gchar *const vsuffix[] =
     {
       ".avi",
+      ".mp4",
+      ".mpg",
       ".rmvb",
       ".rm",
-      ".mp4",
+      ".mov",
       ".mkv",
+      ".m4v",
+      ".mpg",
+      ".mpeg",
+      ".vob",
+      ".asf",
+      ".wmv",
       ".3gp",
       ".flv",
-      ".vob",
-      ".wmv",
-      ".mov",
+      ".mod",
       ".swf",
     };
 
@@ -100,6 +106,8 @@ ini_new ()
 		  vsuffix[i]);
     }
   ini->video_suffix[i][0] = 0;
+
+  ini->proc_other = FALSE;
 
   ini->compare_count = 4;
 

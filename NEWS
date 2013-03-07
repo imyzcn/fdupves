@@ -1,9 +1,17 @@
-Klara.0.1
-* First workable release
+Klara.0.5
+* find files more quickly
+
+Klara.0.4
+* add file detail in result tree
+* add multiple select
+
+Klara.0.3
+* add open file action in result window by double click
 
 Klara.0.2
 * Fix the 'open/open dir' can't work bug
 * add help document file
 
-Klara.0.3
-* add open file action in result window by double click
+Klara.0.1
+* First workable release
+
