@@ -1251,6 +1251,8 @@ image2widget (const file_node *fn)
 			  fn->format);
 
   label = gtk_label_new (desc);
+  gtk_label_set_max_width_chars (GTK_LABEL (label), 60);
+  gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_MIDDLE);
   g_free (desc);
 
   err = NULL;
@@ -1307,6 +1309,8 @@ video2widget (const file_node *fn, int seek)
 			  fn->length,
 			  fn->width, fn->height);
   label = gtk_label_new (desc);
+  gtk_label_set_max_width_chars (GTK_LABEL (label), 60);
+  gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_MIDDLE);
   g_free (desc);
 
   g_snprintf (tmpname, sizeof tmpname, "%d.jpg", rand ());
