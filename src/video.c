@@ -25,6 +25,7 @@
  */
 
 #include "video.h"
+#include "util.h"
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
@@ -45,6 +46,14 @@ video_get_info (const char *file)
   ret = avformat_open_input (&fmt_ctx, file, NULL, NULL);
   if (ret != 0)
     {
+      g_warning (_ ("could not open: %s"), file);
+      return NULL;
+    }
+
+  if (avformat_find_stream_info (fmt_ctx, NULL) < 0)
+    {
+      g_warning (_ ("could not find stream infomations: %s"), file);
+      avformat_close_input (&fmt_ctx);
       return NULL;
     }
 
@@ -59,6 +68,7 @@ video_get_info (const char *file)
 
   if(s == -1)
     {
+      g_warning (_ ("could not find video stream: %s"), file);
       avformat_close_input (&fmt_ctx);
       return NULL;
     }
@@ -69,7 +79,14 @@ video_get_info (const char *file)
 
   info->name = g_path_get_basename (file);
   info->dir = g_path_get_dirname (file);
-  info->length = (double) (stream->duration * stream->time_base.num) / stream->time_base.den;
+  if (stream->duration != AV_NOPTS_VALUE)
+    {
+      info->length = (double) (stream->duration * stream->time_base.num) / stream->time_base.den;
+    }
+  else
+    {
+      info->length = (double) (fmt_ctx->duration) / AV_TIME_BASE;
+    }
   info->size[0] = stream->codec->width;
   info->size[1] = stream->codec->height;
   info->format = avcodec_get_name (stream->codec->codec_id);
@@ -120,13 +137,13 @@ video_time_screenshot (const char *file, int time,
 
   if (avformat_open_input (&format_ctx, file, NULL, NULL) != 0)
     {
-      g_warning ("could not open: %s", file);
+      g_warning (_ ("could not open: %s"), file);
       return -1;
     }
 
   if (avformat_find_stream_info (format_ctx, NULL) < 0)
     {
-      g_warning ("could not find codec parameters: %s", file);
+      g_warning (_ ("could not find stream infomations: %s"), file);
       avformat_close_input (&format_ctx);
       return -1;
     }
@@ -143,7 +160,7 @@ video_time_screenshot (const char *file, int time,
 
   if (s == -1)
     {
-      g_warning ("could not find video stream: %s", file);
+      g_warning (_ ("could not find video stream: %s"), file);
       avformat_close_input (&format_ctx);
       return -1;
     }
@@ -155,7 +172,7 @@ video_time_screenshot (const char *file, int time,
   if (codec == NULL)
     {
       avformat_close_input (&format_ctx);
-      g_warning ("Unsupported codec: %s", file);
+      g_warning (_ ("Unsupported codec: %s"), file);
       return -1;
     }
 
@@ -240,7 +257,7 @@ video_time_screenshot (const char *file, int time,
 			      PIX_FMT_RGB24, SWS_FAST_BILINEAR,
 			      NULL, NULL, NULL);
       if (!img_convert_ctx) {
-	g_warning ("Cannot initialize sws conversion context");
+	g_warning (_ ("Cannot initialize sws conversion context"));
 	av_free_packet(&packet);
 	bytes = -1;
 	break;

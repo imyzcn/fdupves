@@ -1,5 +1,6 @@
 Klara.0.5
 * find files more quickly
+* fix the 'can\'t get duration of file' error
 
 Klara.0.4
 * add file detail in result tree
