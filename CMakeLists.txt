@@ -4,7 +4,7 @@ PROJECT (fdupves "C")
 
 SET (PROJECT_MAJOR      "Klara")
 SET (PROJECT_MINOR      "0")
-SET (PROJECT_PATCH      "5")
+SET (PROJECT_PATCH      "6")
 SET (PROJECT_ICON       "wowgirls-klara.jpg")
 
 ADD_DEFINITIONS (
@@ -42,11 +42,12 @@ IF (WIN32)
   SET (REQ_LIBRARIES windowscodecs.lib)
   ADD_DEFINITIONS (-DWIN32
     -D_CRT_SECURE_NO_WARNINGS
+    -D_USE_MATH_DEFINES
     -DUINT64_C=
     )
 ELSE (WIN32)
   SET (CMAKE_C_FLAGS "-Wall -D_FILE_OFFSET_BITS=64")
-  SET (REQ_LIBRARIES)
+  SET (REQ_LIBRARIES -lm)
 
   OPTION (FDUPVES_ENABLE_DEBUG "If build binary with debug infomations." OFF)
   IF (FDUPVES_ENABLE_DEBUG)

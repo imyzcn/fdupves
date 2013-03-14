@@ -47,8 +47,6 @@ typedef struct
   gint same_video_distance;
   gint same_image_distance;
 
-  gint hash_size[2];
-
   gint thumb_size[2];
 
   gint video_timers[0x10][3];

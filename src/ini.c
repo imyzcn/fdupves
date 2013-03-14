@@ -112,10 +112,7 @@ ini_new ()
   ini->compare_count = 4;
 
   ini->same_image_distance = 1;
-  ini->same_video_distance = 8;
-
-  ini->hash_size[0] = 8;
-  ini->hash_size[1] = 8;
+  ini->same_video_distance = 5;
 
   ini->thumb_size[0] = 512;
   ini->thumb_size[1] = 384;
