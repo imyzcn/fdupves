@@ -1205,27 +1205,104 @@ gui_filter_result (gui_t *gui, const gchar *filter)
   gtk_tree_view_expand_all (GTK_TREE_VIEW (gui->restree));
 }
 
-static void
-restree_delete (GtkMenuItem *item, gui_t *gui)
+#ifdef WIN32
+static int
+win32_remove (gui_t *gui, const gchar *filename, gboolean confirm)
+{
+  int ret;
+  gchar *lname, destfile[PATH_MAX], *d;
+  const gchar *p;
+  SHFILEOPSTRUCT FileOp;
+
+  lname = g_locale_from_utf8 (filename, -1, NULL, NULL, NULL);
+  if (lname)
+    {
+      for (p = lname, d = destfile;
+	   *p;
+	   ++ p, ++ d)
+	{
+	  *d = *p;
+	  if (*d == '\\')
+	    {
+	      * (++ d) = '\\';
+	    }
+	}
+      *d = '\0';
+      *(d + 1) = '\0';
+      g_free (lname);
+    }
+  else
+    {
+      for (p = filename, d = destfile;
+	   *p;
+	   ++ p, ++ d)
+	{
+	  *d = *p;
+	  if (*d == '\\')
+	    {
+	      * (++ d) = '\\';
+	    }
+	}
+      *d = '\0';
+      *(d + 1) = '\0';
+    }
+
+  memset (&FileOp, 0, sizeof FileOp);
+  FileOp.hwnd = HWND_DESKTOP;
+  FileOp.fFlags = FOF_ALLOWUNDO;
+  FileOp.wFunc = FO_DELETE;
+  FileOp.pFrom = destfile;
+  FileOp.lpszProgressTitle = "Delete file";
+
+  if (!confirm)
+    {
+      FileOp.fFlags |= FOF_NOCONFIRMATION;
+    }
+  ret = SHFileOperation (&FileOp);
+
+  return ret;
+}
+#else
+static int
+gui_remove (gui_t *gui, const gchar *filename, gboolean confirm)
 {
   GtkWidget *dia;
-  gint i, ret;
+  gint ret;
 
   dia = gtk_message_dialog_new (GTK_WINDOW (gui->widget),
 				GTK_DIALOG_DESTROY_WITH_PARENT,
 				GTK_MESSAGE_INFO,
 				GTK_BUTTONS_YES_NO,
-				_ ("Are you sure you want to delete these files? ")
-				);
+				_ ("Are you sure you want to delete %s? ")
+				, filename);
 
   ret = gtk_dialog_run (GTK_DIALOG (dia));
   gtk_widget_destroy (dia);
 
   if (ret == GTK_RESPONSE_YES)
     {
-      for (i = 0; gui->resselfiles[i]; ++ i)
+      g_remove (filename);
+      return 0;
+    }
+
+  return -1;
+}
+#endif
+
+static void
+restree_delete (GtkMenuItem *item, gui_t *gui)
+{
+  gint i, ret;
+
+  for (i = 0; gui->resselfiles[i]; ++ i)
+    {
+#ifdef WIN32
+      ret = win32_remove (gui, gui->resselfiles[i]->path, TRUE);
+#else
+      ret = gui_remove (gui, gui->resselfiles[i]->path, TRUE);
+#endif
+      if (ret == 0)
 	{
-	  g_remove (gui->resselfiles[i]->path);
 	  file_node_free_full (gui->resselfiles[i]);
 	}
     }

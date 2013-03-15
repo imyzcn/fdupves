@@ -49,6 +49,10 @@
 
 #define _(S)    gettext (S)
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 #define FD_IMAGE 1
 #define FD_VIDEO 2
 
