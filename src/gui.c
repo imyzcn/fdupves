@@ -868,7 +868,7 @@ gui_destroy_cb (GtkWidget *but, GdkEvent *ev, gui_t *gui)
 				GTK_DIALOG_DESTROY_WITH_PARENT,
 				GTK_MESSAGE_INFO,
 				GTK_BUTTONS_YES_NO,
-				_ ("Are you sure you want to quit fdupves? ")
+				_ ("Are you sure you want to quit fdupves?")
 				);
 
   ret = gtk_dialog_run (GTK_DIALOG (dia));
@@ -1207,7 +1207,7 @@ gui_filter_result (gui_t *gui, const gchar *filter)
 
 #ifdef WIN32
 static int
-win32_remove (gui_t *gui, const gchar *filename, gboolean confirm)
+win32_remove (gui_t *gui, const gchar *filename, gboolean totrash)
 {
   int ret;
   gchar *lname, destfile[PATH_MAX], *d;
@@ -1249,61 +1249,127 @@ win32_remove (gui_t *gui, const gchar *filename, gboolean confirm)
 
   memset (&FileOp, 0, sizeof FileOp);
   FileOp.hwnd = HWND_DESKTOP;
-  FileOp.fFlags = FOF_ALLOWUNDO;
   FileOp.wFunc = FO_DELETE;
+  FileOp.fFlags = FOF_NOCONFIRMATION;
   FileOp.pFrom = destfile;
   FileOp.lpszProgressTitle = "Delete file";
 
-  if (!confirm)
+  if (totrash)
     {
-      FileOp.fFlags |= FOF_NOCONFIRMATION;
+      FileOp.fFlags |= FOF_ALLOWUNDO;
     }
+
   ret = SHFileOperation (&FileOp);
 
   return ret;
 }
-#else
-static int
-gui_remove (gui_t *gui, const gchar *filename, gboolean confirm)
+#endif
+
+#define FDUPVES_DEL_ALL 1
+#define FDUPVES_DEL_TOTRASH (1<<1)
+
+static void
+gui_delete_all_cb (GtkToggleButton *but, gint *pflags)
 {
-  GtkWidget *dia;
-  gint ret;
+  g_assert (pflags);
+
+  if (gtk_toggle_button_get_active (but))
+    {
+      *pflags |= FDUPVES_DEL_ALL;
+    }
+  else
+    {
+      *pflags &= (~ FDUPVES_DEL_ALL);
+    }
+}
+
+#ifdef WIN32
+static void
+gui_delete_totrash_cb (GtkToggleButton *but, gint *pflags)
+{
+  g_assert (pflags);
+
+  if (gtk_toggle_button_get_active (but))
+    {
+      *pflags |= FDUPVES_DEL_TOTRASH;
+    }
+  else
+    {
+      *pflags &= (~ FDUPVES_DEL_TOTRASH);
+    }
+}
+#endif
+
+static gint
+gui_delete_dialog_ask (gui_t *gui, const gchar *filename, gint *pflags)
+{
+  GtkWidget *dia, *all;
+  gint res;
+#ifdef WIN32
+  GtkWidget *totrash;
+#endif
 
   dia = gtk_message_dialog_new (GTK_WINDOW (gui->widget),
 				GTK_DIALOG_DESTROY_WITH_PARENT,
 				GTK_MESSAGE_INFO,
 				GTK_BUTTONS_YES_NO,
-				_ ("Are you sure you want to delete %s? ")
+				_ ("Are you sure you want to delete %s?")
 				, filename);
+  all = gtk_check_button_new_with_label (_ ("Use this action for all the other files"));
+  gtk_box_pack_start (GTK_BOX (GTK_DIALOG (dia)->vbox), all, TRUE, TRUE, 2);
+  g_signal_connect (G_OBJECT (all), "toggled",
+		    G_CALLBACK (gui_delete_all_cb), pflags);
+#ifdef WIN32
+  totrash = gtk_check_button_new_with_label (_ ("move file to trash, but not really delete it"));
+  gtk_box_pack_start (GTK_BOX (GTK_DIALOG (dia)->vbox), totrash, TRUE, TRUE, 2);
+  g_signal_connect (G_OBJECT (totrash), "toggled",
+		    G_CALLBACK (gui_delete_totrash_cb), pflags);
+#endif
+  gtk_widget_show_all (GTK_WIDGET (GTK_DIALOG (dia)->vbox));
 
-  ret = gtk_dialog_run (GTK_DIALOG (dia));
+  res = gtk_dialog_run (GTK_DIALOG (dia));
   gtk_widget_destroy (dia);
 
-  if (ret == GTK_RESPONSE_YES)
-    {
-      g_remove (filename);
-      return 0;
-    }
-
-  return -1;
+  return res;
 }
-#endif
 
 static void
 restree_delete (GtkMenuItem *item, gui_t *gui)
 {
-  gint i, ret;
+  gint i, res, ret, flags;
 
+  res = 0;
+  flags = 0;
   for (i = 0; gui->resselfiles[i]; ++ i)
     {
-#ifdef WIN32
-      ret = win32_remove (gui, gui->resselfiles[i]->path, TRUE);
-#else
-      ret = gui_remove (gui, gui->resselfiles[i]->path, TRUE);
-#endif
-      if (ret == 0)
+      if (res == 0)
 	{
-	  file_node_free_full (gui->resselfiles[i]);
+	  res = gui_delete_dialog_ask (gui, gui->resselfiles[i]->path, &flags);
+	}
+
+      if (res == GTK_RESPONSE_YES)
+	{
+#ifdef WIN32
+	  if (flags & FDUPVES_DEL_TOTRASH)
+	    {
+	      ret = win32_remove (gui, gui->resselfiles[i]->path, TRUE);
+	    }
+	  else
+	    {
+	      ret = win32_remove (gui, gui->resselfiles[i]->path, FALSE);
+	    }
+#else
+	  ret = g_remove (gui->resselfiles[i]->path);
+#endif
+	  if (ret == 0)
+	    {
+	      file_node_free_full (gui->resselfiles[i]);
+	    }
+	}
+
+      if (!(flags & FDUPVES_DEL_ALL))
+	{
+	  res = 0;
 	}
     }
 
