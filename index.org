@@ -17,9 +17,11 @@ Searches the given path for duplicate video or image files. Such files are found
 ** [[http://github.com/naihe2010/fdupves][Source]]
 
 * [[./documentation.html][Documentation]]
-
+ - [[./doc-zh_CN.html][简体中文]]
+ - [[./documentation.html][English]]
 * [[./screenshot.html][Screenshot]]
 * Authors
 
  - Email: [[mailto:naihe2010@126.com][naihe2010 at 126.com]]
  - Weibo: [[http://weibo.com/naihe2010/][naihe2010 at weibo.com]]
+* [[./donate.html][Donate]]
