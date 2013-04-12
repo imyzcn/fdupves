@@ -19,28 +19,20 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
-/* @CFILE ihash.h
+/* @CFILE image.h
  *
  *  Author: Alf <naihe2010@126.com>
  */
 
-#ifndef _FDUPVES_HASH_H_
-#define _FDUPVES_HASH_H_
+#ifndef _FDUPVES_IMAGE_H_
+#define _FDUPVES_IMAGE_H_
 
-typedef unsigned long long hash_t;
+#ifdef WIN32
 
-hash_t file_hash (const char *);
+#include <gdk-pixbuf/gdk-pixbuf.h>
 
-hash_t buffer_hash (const char *, int);
+GdkPixbuf * gdk_pixbuf_new_from_file_at_scale_wic (const gchar *, gint, gint, gboolean, GError **);
 
-hash_t video_time_hash (const char *, int);
-
-hash_t file_phash (const char *);
-
-hash_t buffer_phash (const char *, int);
-
-hash_t video_time_phash (const char *, int);
-
-int hash_cmp (hash_t, hash_t);
+#endif
 
 #endif

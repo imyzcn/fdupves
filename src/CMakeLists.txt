@@ -14,13 +14,19 @@ SET (SOURCES
   gui.c
   ini.c
   hash.c
+  phash.c
   find.c
   video.c
   main.c
   )
 
 IF (WIN32)
+  SET (HEADERS
+    image-win.h
+    ${HEADERS}
+    )
   SET (SOURCES
+    image-win.c
     main.rc
     ${SOURCES}
     )

@@ -1,0 +1,1261 @@
+#!/usr/bin/perl
+
+use v5.14;
+use warnings;
+use strict;
+
+use Config::Tiny;
+use Data::Dumper;
+use File::Basename;
+use File::Copy;
+use File::Spec::Functions;
+use Perl::OSType qw/is_os_type/;
+use File::Path qw/make_path/;
+use Digest::SHA qw/sha1_hex/;
+
+use User;
+use Wx qw(:everything);
+use Wx::Event qw/EVT_CLOSE
+		 EVT_TOOL
+		 EVT_BUTTON
+		 EVT_LIST_ITEM_ACTIVATED
+		 EVT_TREE_SEL_CHANGED
+		 EVT_TREE_ITEM_ACTIVATED
+		 EVT_CHECKLISTBOX/;
+use Wx::Locale;
+use Encode;
+
+# GLobal configurations
+my $config;
+
+# Process data
+my @cmd_files;
+my %cache_hash;
+
+# Script Starts here
+my $OsIsWin = 0;
+if ( is_os_type('Windows') )
+  {
+    $OsIsWin = 1;
+  }
+
+&load_default_conf;
+
+my $UserHome  = User->Home;
+my $ConfFile  = catfile( $UserHome, '.fdupvesrc' );
+my $CacheFile = catfile( $UserHome, '.fdupves.cache' );
+
+# First, parse the configuration file
+&load_file_conf or die "Load configuration file error\n";
+
+# Second, set src file list from command line
+for (@ARGV)
+  {
+    $_ =~ s/^\~/$UserHome/;
+    $_ = File::Spec->rel2abs($_) unless ( file_name_is_absolute($_) );
+    push @cmd_files, $_;
+  }
+
+if ( $config->{workpath} =~ /^\~/ )
+  {
+    my @dirs = File::Spec->splitdir( $config->{workpath} );
+    shift @dirs;
+    $config->{workpath} = catdir( $UserHome, @dirs );
+  }
+
+# load img hash
+if ( open FH, '<', $CacheFile )
+  {
+    while (<FH>)
+      {
+        chomp;
+        my ( $file, $timer, $hasha, $hashb ) = split /\|\|\|\|/, $_;
+        next unless ( -e $file );
+        $cache_hash{$file}->{hash}->{$timer} = pack 'VV', $hasha, $hashb;
+      }
+    close FH;
+  }
+
+&gui_init;
+
+# Save the cache data before exit
+END {
+  # Save conf
+  if ($ConfFile)
+    {
+      &save_file_conf;
+    }
+
+  # Save img hash and exit
+  if ($CacheFile)
+    {
+      open FH, '>', $CacheFile;
+      for my $file ( keys %cache_hash )
+	{
+	  while ( my ( $timer, $hash ) =
+		  each %{ $cache_hash{$file}->{hash} } )
+            {
+	      my ( $hasha, $hashb ) = unpack 'V2', $hash;
+	      my $str = join( '||||', $file, $timer, $hasha, $hashb ) . "\n";
+	      print FH $str;
+            }
+        }
+      close FH;
+    }
+}
+
+sub load_default_conf {
+  $config = {
+	     workpath => "~/.cache/fdupves",
+	     verbose  => 0,
+	     player   => 'mplayer',
+
+	     proc_image   => 0,
+	     image_suffix => [
+			      '.bmp', '.gif', '.jpeg', '.jpg', '.png', 'pcx',
+			      'pnm',  'tif',  'tga',   'xpm',  'ico',  'cur',
+			      'ani',
+			     ],
+
+	     proc_video   => 1,
+	     video_suffix => [
+			      ".avi", ".rmvb", ".rm",  ".mp4", ".mkv", ".3gp",
+			      ".flv", ".vob",  ".wmv", ".mov", ".swf",
+			     ],
+
+	     compare_count => 4,
+
+	     hash_distance => 2,
+
+	     hash_size  => [ 8,   8, ],
+	     thumb_size => [ 512, 384 ],
+
+	     video_timers => [
+			      [ 5,    15,    1 ],
+			      [ 10,   90,    3 ],
+			      [ 60,   600,   10 ],
+			      [ 480,  2400,  60 ],
+			      [ 1800, 28800, 120 ],
+			     ],
+	    };
+}
+
+sub load_file_conf {
+  my $ini = Config::Tiny->read($ConfFile);
+
+  for my $k ( keys %{ $ini->{_} } )
+    {
+
+      if (   $k eq 'video_suffix'
+	     || $k eq 'image_suffix'
+	     || $k eq 'hash_size'
+	     || $k eq 'thumb_size' )
+        {
+	  my @items = split / /, $ini->{_}->{$k};
+	  $config->{$k} = \@items;
+
+        }
+      elsif ( $k eq 'video_timers' )
+	{
+	  my @timers = split / /, $ini->{_}->{video_timers};
+
+	  delete $config->{video_timers};
+
+	  for (@timers)
+	    {
+	      my @secs = split /,/, $_;
+	      push @{ $config->{video_timers} }, \@secs;
+            }
+
+        }
+      else
+	{
+	  $config->{$k} = $ini->{_}->{$k};
+        }
+    }
+  1;
+}
+
+sub save_file_conf {
+  my $ini = Config::Tiny->new;
+
+  for my $k ( keys %{$config} )
+    {
+      if (   $k eq 'video_suffix'
+	     || $k eq 'image_suffix'
+	     || $k eq 'hash_size'
+	     || $k eq 'thumb_size' )
+        {
+	  $ini->{_}->{$k} = join ' ', @{ $config->{$k} };
+
+        }
+      elsif ( $k eq 'video_timers' )
+	{
+	  my @timers;
+	  for my $i ( @{ $config->{$k} } )
+	    {
+	      push @timers, join ',', @{$i};
+            }
+	  $ini->{_}->{video_timers} = join ' ', @timers;
+
+        }
+      else
+	{
+	  $ini->{_}->{$k} = $config->{$k};
+        }
+    }
+
+  $ini->write($ConfFile);
+}
+
+sub process_dir {
+  my ( $self, $filesp ) = @_;
+
+  for ( @{$filesp} )
+    {
+      if ( -d $_ )
+	{
+	  walk_dir( $self, \&file_parse, $_ );
+        }
+      elsif ( -f $_ )
+	{
+	  file_parse( $self, $_ );
+        }
+    }
+
+  my @same_files;
+
+  if ( $config->{proc_video} )
+    {
+      if ( exists $self->{videos}
+	   && keys %{ $self->{videos} } > 1 )
+        {
+	  my $samevideop = process_video($self);
+	  if ( ref $samevideop eq 'ARRAY' )
+	    {
+	      push @same_files, @{$samevideop};
+            }
+        }
+      else
+	{
+	  Wx::LogWarning "no enough video files to process";
+        }
+    }
+
+  if ( $config->{proc_image} )
+    {
+      if ( exists $self->{images}
+	   && keys %{ $self->{images} } > 1 )
+        {
+	  my $sameimagep = process_image($self);
+	  if ( ref $sameimagep eq 'ARRAY' )
+	    {
+	      push @same_files, @{$sameimagep};
+            }
+        }
+      else
+	{
+	  Wx::LogWarning "no enough image files to process";
+        }
+    }
+
+  \@same_files;
+}
+
+sub walk_dir {
+  my ( $self, $callback, @dirs ) = @_;
+
+  while ( my $dir = pop @dirs )
+    {
+      local *DH;
+      if ( !opendir( DH, $dir ) )
+	{
+	  Wx::LogWarning "Cannot opendir $dir: $!";
+	  next;
+        }
+      foreach ( readdir(DH) )
+	{
+	  if ( $_ eq '.' || $_ eq '..' )
+	    {
+	      next;
+            }
+	  my $file = catfile( $dir, $_ );
+
+	  if ( -d $file )
+	    {
+	      push( @dirs, $file );
+            }
+	  elsif ( -f $file )
+	    {
+	      &$callback( $self, $file );
+            }
+        }
+
+      closedir(DH);
+    }
+}
+
+sub display_sames {
+  my ( $self, $samefilep ) = @_;
+
+  # Clear the result tree first
+  $self->{res_tree}->DeleteAllItems;
+
+  my $root = $self->{res_tree}->AddRoot('');
+
+  for my $samefilesp ( @{$samefilep} )
+    {
+      my $parent = $self->{res_tree}->AppendItem( $root, $samefilesp->[0] );
+      for my $id ( 1 .. @{$samefilesp} - 1 )
+	{
+	  $self->{res_tree}->AppendItem( $parent, $samefilesp->[$id] );
+        }
+    }
+
+  $self->{res_tree}->ExpandAll;
+}
+
+sub gui_onabout {
+  my ($self) = @_;
+  my $info = Wx::AboutDialogInfo->new;
+
+  $info->SetName('fdupves');
+  $info->SetVersion('0.0.1');
+  $info->SetDescription('find duplicate video/image files');
+  $info->SetCopyright('(c) 2012-2013 Alf <naihe2010@126.com>');
+  $info->SetWebSite( 'http://blog.sina.com.cn/naihe2010', 'The blog of Alf' );
+  $info->AddDeveloper('Alf <naihe2010@126.org>');
+
+  $info->SetArtists( ['Alf <naihe2010@126.com>'] );
+
+  Wx::AboutBox($info);
+}
+
+sub gui_onclose {
+  my ( $self, $ev ) = @_;
+  Wx::Log::SetActiveTarget( $self->{old_log} );
+  $ev->Skip;
+}
+
+sub gui_init {
+  my $app = Wx::SimpleApp->new;
+  my $frame =
+    Wx::Frame->new( undef, wxID_ANY,
+		    "fdupves - find duplicate video/image files",
+		    wxDefaultPosition, [ 800, 600 ] );
+
+  Wx::InitAllImageHandlers;	#init img handlers
+
+  $frame->{encoding} = Wx::Locale::GetSystemEncodingName;
+
+  ui_toolbar_new($frame);
+  ui_childarea_new($frame);
+  ui_statusbar_new($frame);
+
+  $frame->Show;
+  $app->MainLoop;
+}
+
+sub ui_toolbar_new {
+  my $self    = shift;
+  my $toolbar = $self->CreateToolBar( wxTB_TEXT | wxTB_NOICONS );
+  $toolbar->SetMargins( 5, 5 );
+  $toolbar->SetSize( [ -1, 50 ] );
+
+  my @toolbars = (
+		  [ 'Add',        \&but_add_clicked,  'add directories for find' ],
+		  [ 'Find',       \&but_find_clicked, 'find duplicate video files' ],
+		  [ 'Preference', \&but_pref_clicked, 'set preference' ],
+		  [ 'About',      \&gui_onabout,      'about fdupves' ],
+		 );
+
+  for ( 0 .. @toolbars - 1 )
+    {
+      $toolbar->AddTool( 100 + $_, $toolbars[$_]->[0],
+			 wxNullBitmap, $toolbars[$_]->[2] );
+      EVT_TOOL( $self, 100 + $_, $toolbars[$_]->[1] );
+    }
+
+  $toolbar->Realize;
+}
+
+sub ui_childarea_new {
+  my $self = shift;
+
+  my $split1 =
+    Wx::SplitterWindow->new( $self, wxID_ANY, wxDefaultPosition,
+			     wxDefaultSize, wxNO_FULL_REPAINT_ON_RESIZE | wxCLIP_CHILDREN );
+  my $split2 =
+    Wx::SplitterWindow->new( $split1, wxID_ANY, wxDefaultPosition,
+			     wxDefaultSize, wxNO_FULL_REPAINT_ON_RESIZE | wxCLIP_CHILDREN );
+  my $resnb =
+    Wx::Notebook->new( $split1, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+		       wxNO_FULL_REPAINT_ON_RESIZE | wxCLIP_CHILDREN );
+  my $findnb =
+    Wx::Notebook->new( $split2, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+		       wxNO_FULL_REPAINT_ON_RESIZE | wxCLIP_CHILDREN );
+  my $text =
+    Wx::TextCtrl->new( $split2, wxID_ANY, "", wxDefaultPosition,
+		       wxDefaultSize,
+		       wxTE_READONLY | wxTE_MULTILINE | wxNO_FULL_REPAINT_ON_RESIZE );
+
+  my $panel =
+    Wx::Panel->new( $findnb, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+		    wxNO_FULL_REPAINT_ON_RESIZE | wxCLIP_CHILDREN );
+
+  my $sizer = Wx::BoxSizer->new(wxVERTICAL);
+
+  $self->{dir_list} = Wx::ListView->new($panel);
+  $self->{dir_list}->InsertColumn( 0, "", wxLIST_FORMAT_LEFT, 300 );
+  $sizer->Add( $self->{dir_list}, 1, wxEXPAND | wxALL, 0 );
+  EVT_LIST_ITEM_ACTIVATED( $self->{dir_list}, $self->{dir_list},
+			   \&dirlist_onactivated );
+
+  my $hsizer = Wx::BoxSizer->new(wxHORIZONTAL);
+  $self->{proc_type} =
+    Wx::CheckListBox->new( $panel, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+			   [ 'Image', 'Video' ] );
+  $hsizer->Add( $self->{proc_type}, 1, wxEXPAND | wxALL, 0 );
+
+  $sizer->Add( $hsizer, 0, wxEXPAND | wxHORIZONTAL, 0 );
+
+  $self->{proc_type}->Check( 0, $config->{proc_image} );
+  $self->{proc_type}->Check( 1, $config->{proc_video} );
+  EVT_CHECKLISTBOX( $self->{proc_type}, $self->{proc_type},
+		    \&proctype_oncheck );
+
+  my $log = Wx::LogTextCtrl->new($text);
+  $self->{old_log} = Wx::Log::SetActiveTarget($log);
+  EVT_CLOSE( $self, \&gui_onclose );
+
+  # load the command line input directoies
+  for (@cmd_files)
+    {
+      $self->{dir_list}->InsertStringItem( @cmd_files - 1, $_ );
+    }
+
+  $panel->SetSizer($sizer);
+  $sizer->Fit($panel);
+  $sizer->SetSizeHints($panel);
+
+  $findnb->AddPage( $panel, 'Source Files', 0 );
+
+  $self->{res_tree} = Wx::TreeCtrl->new($resnb);
+  $resnb->AddPage( $self->{res_tree}, 'Same Files', 0 );
+  EVT_TREE_SEL_CHANGED( $self, $self->{res_tree}, \&restree_onselchanged );
+  EVT_TREE_ITEM_ACTIVATED( $self, $self->{res_tree}, \&restree_onactivated );
+
+  $split1->SplitVertically( $split2, $resnb, 300 );
+  $split2->SplitHorizontally( $findnb, $text, 400 );
+}
+
+sub proctype_oncheck {
+  my ( $self, $ev ) = @_;
+  $config->{proc_image} = $self->IsChecked(0);
+  $config->{proc_video} = $self->IsChecked(1);
+}
+
+sub dirlist_onactivated {
+  my ( $self, $ev ) = @_;
+  $self->DeleteItem( $ev->GetIndex );
+}
+
+sub restree_onselchanged {
+  my ( $self, $ev ) = @_;
+  $self->{res_tree}->{seledid} = $ev->GetOldItem;
+}
+
+sub restree_onactivated {
+  my ( $self, $ev ) = @_;
+  my $id = $ev->GetItem;
+
+  unless ( exists $self->{res_tree}->{seledid} )
+    {
+      $self->{res_tree}->{seledid} = $id;
+    }
+  else
+    {
+      my $lastid = $self->{res_tree}->{seledid};
+      if ( $id != $lastid )
+	{
+	  my $afile = $self->{res_tree}->GetItemText($lastid);
+	  my $bfile = $self->{res_tree}->GetItemText($id);
+	  display_diff(
+		       $self,
+		       encode( $self->{encoding}, $afile ),
+		       encode( $self->{encoding}, $bfile ),
+		      );
+	  delete $self->{res_tree}->{seledid};
+        }
+    }
+}
+
+sub ui_statusbar_new {
+  my $self = shift;
+  $self->{statusbar} = $self->CreateStatusBar;
+}
+
+sub but_add_clicked {
+  my $self = shift;
+
+  my $dia =
+    Wx::DirDialog->new( $self, "Choose a directory", "",
+			wxDD_DIR_MUST_EXIST );
+  my $res = $dia->ShowModal;
+  if ( $res == wxID_OK )
+    {
+      $self->{dir_list}
+	->InsertStringItem( $self->{dir_list}->GetItemCount, $dia->GetPath );
+    }
+}
+
+sub but_find_clicked {
+  my $self = shift;
+
+  unless ( $config->{proc_image} || $config->{proc_video} )
+    {
+      my $mes = Wx::MessageDialog->new(
+				       $self,  "Please check process image/video.",
+				       "Warn", wxOK | wxICON_HAND | wxSTAY_ON_TOP
+				      );
+      $mes->ShowModal;
+      return;
+    }
+
+  my @files;
+  for ( 0 .. $self->{dir_list}->GetItemCount - 1 )
+    {
+      my $file = $self->{dir_list}->GetItemText($_);
+      my $localname = encode( $self->{encoding}, $file );
+      push @files, $localname;
+    }
+
+  unless (@files) {
+    my $mes = Wx::MessageDialog->new(
+				     $self,  "Please 'Add' source directory first.",
+				     "Warn", wxOK | wxICON_HAND | wxSTAY_ON_TOP
+				    );
+    $mes->ShowModal;
+    return;
+  }
+
+  # Clear the find tempory data
+  delete $self->{videos};
+  delete $self->{images};
+
+  my $samefilep = process_dir( $self, \@files );
+  return unless ($samefilep);
+
+  Wx::LogMessage "Totally find %d groups of the same files",
+      scalar @{$samefilep};
+  display_sames( $self, $samefilep );
+}
+
+sub but_pref_clicked {
+  my $self = shift;
+
+  my $dia =
+    Wx::Dialog->new( $self, wxID_ANY, "Preference",
+		     wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER, );
+
+  my $vsizer = Wx::BoxSizer->new(wxVERTICAL);
+
+  # MPlayer path
+  {
+    my $hsizer = Wx::BoxSizer->new(wxHORIZONTAL);
+    my $label  = Wx::StaticText->new(
+				     $dia, wxID_ANY, "MPlayer Binary",
+				     wxDefaultPosition, [ 100, 20 ],
+				    );
+    $hsizer->Add( $label, 0, wxALIGN_CENTER_VERTICAL );
+    $dia->{player_input} = Wx::FilePickerCtrl->new(
+						   $dia,          wxID_ANY,
+						   "",            "Please select your mplayer executable file",
+						   "*",           wxDefaultPosition,
+						   wxDefaultSize, wxFLP_USE_TEXTCTRL | wxFLP_OPEN,
+						  );
+    $dia->{player_input}->SetPath( $config->{player} );
+    $hsizer->Add( $dia->{player_input}, 1, wxEXPAND );
+    $vsizer->Add( $hsizer, 0, wxEXPAND | wxALL, 5 );
+  }
+
+  # Image suffix
+  {
+    my $hsizer = Wx::BoxSizer->new(wxHORIZONTAL);
+    my $label =
+      Wx::StaticText->new( $dia, wxID_ANY, "Image Suffix",
+			   wxDefaultPosition, [ 100, 20 ],
+			 );
+    $hsizer->Add( $label, 0, wxALIGN_CENTER_VERTICAL );
+    my $value = join ' ', @{ $config->{image_suffix} };
+    $dia->{image_suffix_input} =
+      Wx::TextCtrl->new( $dia, wxID_ANY, $value, );
+    $dia->{image_suffix_input}->SetValue($value);
+    $hsizer->Add( $dia->{image_suffix_input}, 1, wxEXPAND );
+    $vsizer->Add( $hsizer, 0, wxEXPAND | wxALL, 5 );
+  }
+
+  # Video suffix
+  {
+    my $hsizer = Wx::BoxSizer->new(wxHORIZONTAL);
+    my $label =
+      Wx::StaticText->new( $dia, wxID_ANY, "Video Suffix",
+			   wxDefaultPosition, [ 100, 20 ],
+			 );
+    $hsizer->Add( $label, 0, wxALIGN_CENTER_VERTICAL );
+    my $value = join ' ', @{ $config->{video_suffix} };
+    $dia->{video_suffix_input} =
+      Wx::TextCtrl->new( $dia, wxID_ANY, $value, );
+    $dia->{video_suffix_input}->SetValue($value);
+    $hsizer->Add( $dia->{video_suffix_input}, 1, wxEXPAND );
+    $vsizer->Add( $hsizer, 0, wxEXPAND | wxALL, 5 );
+  }
+
+  # Video Length Matrix
+  {
+    my $hsizer = Wx::BoxSizer->new(wxHORIZONTAL);
+    my $label  = Wx::StaticText->new(
+				     $dia, wxID_ANY, "Video Length Matrix",
+				     wxDefaultPosition, [ 150, 20 ],
+				    );
+    $hsizer->Add( $label, 0, wxALIGN_CENTER_VERTICAL );
+    my @str;
+    for ( @{ $config->{video_timers} } )
+      {
+	push @str, join ',', @{$_};
+      }
+    my $value = join ' ', @str;
+    $dia->{video_matrix_input} =
+      Wx::TextCtrl->new( $dia, wxID_ANY, $value, );
+    $hsizer->Add( $dia->{video_matrix_input}, 1, wxEXPAND );
+    $vsizer->Add( $hsizer, 1, wxEXPAND | wxALL, 5 );
+  }
+
+  my $bsizer = $dia->CreateButtonSizer( wxOK | wxCANCEL );
+  $vsizer->Add( $bsizer, 0, wxALIGN_CENTER_HORIZONTAL, 10 );
+
+  $dia->SetSizer($vsizer);
+  $vsizer->SetSizeHints($dia);
+
+  my $res = $dia->ShowModal;
+  if ( $res == wxID_OK )
+    {
+      my $player = $dia->{player_input}->GetPath;
+      $config->{player} = $player if ( -f $player );
+    }
+}
+
+sub process_video {
+  my ($self)           = @_;
+  my $videos           = $self->{videos};
+  my $sort_group_files = sort_video_by_similar($videos);
+  my @same_videos;
+
+  for my $sort_files (@$sort_group_files)
+    {
+      for my $file ( @{$sort_files} )
+	{
+
+	  # break when hash distance >5
+	  last if ( $videos->{$file}->{min_hash} > $config->{hash_distance} );
+
+	  my $nextfile = $videos->{$file}->{min_file};
+
+	  my $shorter = $videos->{$file}->{info}->{length};
+	  $shorter = $videos->{$nextfile}->{info}->{length}
+	    if ( $videos->{$nextfile}->{info}->{length} < $shorter );
+	  my $interval = $shorter / ( $config->{compare_count} );
+
+	  my $equ = 1;
+	  for ( 1 .. $config->{compare_count} - 1 )
+	    {
+	      my $ss = $videos->{$file}->{min_chunk} + $_ * $interval;
+	      $ss =
+		$videos->{$file}->{info}->{length} -
+                  $videos->{$file}->{min_chunk} -
+		    $_ * $interval
+		      if ( $videos->{$file}->{min_type} == 1 );
+
+	      my $hasha = get_filetime_hash( $videos, $file,     $ss );
+	      my $hashb = get_filetime_hash( $videos, $nextfile, $ss );
+	      if ( imghash_cmp( $hasha, $hashb ) > $config->{hash_distance} )
+                {
+		  $equ = 0;
+		  last;
+                }
+            }
+
+	  # find the previous duplicate files
+	  my $has_find = 0;
+	  for my $sfs (@same_videos)
+	    {
+	      for my $curfile ( @{$sfs} )
+		{
+		  if ( $curfile eq $file )
+		    {
+		      push @{$sfs}, $nextfile
+			unless ( grep { $nextfile eq $_ } @{$sfs} );
+		      $has_find = 1;
+                    }
+                }
+            }
+
+	  unless ($has_find) {
+	    my @sfs = ( $file, $nextfile );
+	    push @same_videos, \@sfs;
+	  }
+        }
+    }
+
+  Wx::LogMessage "Find %d groups of the same videos", scalar @same_videos;
+  \@same_videos;
+}
+
+sub process_image {
+  my ($self) = @_;
+  my $images = $self->{images};
+  my @files  = keys %{$images};
+  my @same_images;
+
+  for my $id ( 0 .. @files - 2 )
+    {
+      my $file = $files[$id];
+      my $hash = $images->{$file}->{hash};
+      my $min  = $config->{hash_size}->[0] * $config->{hash_size}->[1];
+      $min = $images->{$file}->{min_hash} if ( $images->{$file}->{min_file} );
+
+      for my $nextid ( $id + 1 .. @files - 1 )
+	{
+	  my $nextfile = $files[$nextid];
+	  my $nexthash = $images->{$nextfile}->{hash};
+	  my $cmp      = imghash_cmp( $hash, $nexthash );
+	  if ( $cmp < $min )
+	    {
+	      $images->{$file}->{min_file} = $nextfile;
+	      $images->{$file}->{min_hash} = $cmp;
+	      $min                         = $cmp;
+            }
+        }
+    }
+
+  my @similar_files = grep {
+    defined $images->{$_}->{min_hash}
+      && $images->{$_}->{min_hash} < $config->{hash_distance}
+    } @files;
+
+  for my $file (@similar_files)
+    {
+      my $nextfile = $images->{$file}->{min_file};
+      my $has_find = 0;
+      for my $sfs (@same_images)
+	{
+	  for my $curfile ( @{$sfs} )
+	    {
+	      if ( $curfile eq $file )
+		{
+		  push @{$sfs}, $nextfile
+		    unless ( grep { $nextfile eq $_ } @{$sfs} );
+		  $has_find = 1;
+                }
+            }
+        }
+      unless ($has_find) {
+	my @sfs = ( $file, $images->{$file}->{min_file} );
+	push @same_images, \@sfs;
+      }
+    }
+
+  Wx::LogMessage "Find %d groups of the same images", scalar @same_images;
+  \@same_images;
+}
+
+sub display_diff {
+  my ( $self, $afile, $bfile ) = @_;
+
+  return unless ( $afile && $bfile );
+
+  my $dia = Wx::Dialog->new( $self, wxID_ANY, "Are they same?", );
+  my $sizer = Wx::BoxSizer->new(wxVERTICAL);
+
+  # File infomations
+  my $tsizer = Wx::BoxSizer->new(wxHORIZONTAL);
+  $sizer->Add( $tsizer, 0, wxEXPAND | wxALL, 4 );
+
+  # File Images
+  $dia->{gsizer} = Wx::BoxSizer->new(wxHORIZONTAL);
+  $sizer->Add( $dia->{gsizer} );
+
+  # Addtional control button
+  my $hsizer = Wx::BoxSizer->new(wxHORIZONTAL);
+  $sizer->Add($hsizer);
+
+  # Dialog buttons. Cancel!!!
+  my $bsizer = $dia->CreateButtonSizer(wxCANCEL);
+  $sizer->Add( $bsizer, 1, wxALIGN_CENTER_HORIZONTAL );
+
+  if ( is_video($afile) )
+    {
+
+      # show depends on less length file
+      my ( $file, $nextfile ) = ( $afile, $bfile );
+      if ( $self->{videos}->{$nextfile}->{info}->{length} <
+	   $self->{videos}->{$file}->{info}->{length} )
+        {
+	  $file     = $bfile;
+	  $nextfile = $afile;
+        }
+      $dia->{file}     = $file;
+      $dia->{nextfile} = $nextfile;
+
+      my $fileinfo =
+	Wx::StaticText->new( $dia, wxID_ANY,
+			     video_info_string( $self, $file ),
+			   );
+      $tsizer->Add( $fileinfo, 1, wxEXPAND | wxALL, 0 );
+      my $nextfileinfo =
+	Wx::StaticText->new( $dia, wxID_ANY,
+			     video_info_string( $self, $nextfile ),
+			   );
+      $tsizer->Add( $nextfileinfo, 1, wxEXPAND | wxALL, 0 );
+
+      my @timers =
+	sort { $a <=> $b } keys %{ $self->{videos}->{$file}->{screenshot} };
+      $dia->{timers}  = \@timers;
+      $dia->{timerid} = 0;
+      $dia->{self}    = $self;
+      dia_adddiffimg($dia);
+
+      $dia->{prev} = Wx::Button->new( $dia, wxID_ANY, 'Previous' );
+      $dia->{prev}->Enable(0);
+      $hsizer->Add( $dia->{prev} );
+      $dia->{next} = Wx::Button->new( $dia, wxID_ANY, 'Next' );
+      $dia->{next}->Enable(1);
+      $hsizer->Add( $dia->{next} );
+      EVT_BUTTON( $dia, $dia->{prev}, \&diff_onprev );
+      EVT_BUTTON( $dia, $dia->{next}, \&diff_onnext );
+    }
+  else
+    {
+      my $fileinfo =
+	Wx::StaticText->new( $dia, wxID_ANY, image_info_string($afile), );
+      $tsizer->Add( $fileinfo, 1, wxEXPAND | wxALL, 0 );
+      my $nextfileinfo =
+	Wx::StaticText->new( $dia, wxID_ANY, image_info_string($bfile), );
+      $tsizer->Add( $nextfileinfo, 1, wxEXPAND | wxALL, 0 );
+
+      dia_addimg( $dia, $afile, $bfile );
+    }
+
+  $dia->SetSizer($sizer);
+  $sizer->Fit($dia);
+  $sizer->SetSizeHints($dia);
+
+  $dia->ShowModal;
+}
+
+sub diff_onprev {
+  my ( $dia, $ev ) = @_;
+  $dia->{timerid}--;
+
+  $dia->{gsizer}->Clear(1);
+  dia_adddiffimg($dia);
+
+  if ( $dia->{timerid} == 0 )
+    {
+      $dia->{prev}->Enable(0);
+    }
+  $dia->{next}->Enable(1);
+}
+
+sub diff_onnext {
+  my ( $dia, $ev ) = @_;
+  $dia->{timerid}++;
+
+  $dia->{gsizer}->Clear(1);
+  dia_adddiffimg($dia);
+
+  if ( $dia->{timerid} == ( scalar @{ $dia->{timers} } - 1 ) )
+    {
+      $dia->{next}->Enable(0);
+    }
+  $dia->{prev}->Enable(1);
+}
+
+sub dia_addimg {
+  my ( $dia, $imgfile, $nextimgfile ) = @_;
+
+  return unless ( -r $imgfile && -r $nextimgfile );
+
+  my $w = $config->{thumb_size}->[0];
+  my $h = $config->{thumb_size}->[1];
+
+  my $imgpre = Wx::Image->new( $imgfile, wxBITMAP_TYPE_ANY );
+  $imgpre->Rescale( $w, $h );
+  my $img = Wx::Bitmap->new($imgpre);
+  my $bitmap = Wx::StaticBitmap->new( $dia, wxID_ANY, $img, );
+  $dia->{gsizer}->Add( $bitmap, 1, wxEXPAND );
+
+  my $nextimgpre = Wx::Image->new( $nextimgfile, wxBITMAP_TYPE_ANY );
+  $nextimgpre->Rescale( $w, $h );
+  my $nextimg = Wx::Bitmap->new($nextimgpre);
+  my $nextbitmap = Wx::StaticBitmap->new( $dia, wxID_ANY, $nextimg, );
+  $dia->{gsizer}->Add( $nextbitmap, 1, wxEXPAND );
+
+  $dia->{gsizer}->Layout;
+}
+
+sub dia_adddiffimg {
+  my ($dia) = @_;
+  my $self  = $dia->{self};
+  my $timer = $dia->{timers}->[ $dia->{timerid} ];
+  my ( $imgfile, $nextimgfile ) = (
+				   $self->{videos}->{ $dia->{file} }->{screenshot}->{$timer},
+				   $self->{videos}->{ $dia->{nextfile} }->{screenshot}->{$timer}
+				  );
+
+  unless ($nextimgfile) {
+    $nextimgfile = catfile( $self->{videos}->{ $dia->{nextfile} }->{imgdir},
+			    $timer . '.jpg' );
+    $self->{videos}->{ $dia->{nextfile} }->{screenshot}->{$timer} =
+      $nextimgfile;
+  }
+  unless ( -r $imgfile ) {
+    get_screenshot( $dia->{file}, $timer, $imgfile );
+  }
+  unless ( -r $nextimgfile ) {
+    get_screenshot( $dia->{nextfile}, $timer, $nextimgfile );
+  }
+
+  dia_addimg( $dia, $imgfile, $nextimgfile );
+}
+
+sub sort_video_by_similar {
+  my ($videos) = @_;
+  my %compared_files;
+  my @group_files;
+  my @sort_group_files;
+
+  for my $timer_id ( 0 .. @{ $config->{video_timers} } - 1 )
+    {
+      my @grep_files = grep {
+	$videos->{$_}->{info}->{length} >=
+	  $config->{video_timers}->[$timer_id]->[0]
+	    && $videos->{$_}->{info}->{length} <
+              $config->{video_timers}->[$timer_id]->[1]
+	    } keys %{$videos};
+      push @group_files, \@grep_files;
+    }
+
+  for my $groupid ( 0 .. @group_files - 1 )
+    {
+      my @files = @{ $group_files[$groupid] };
+      my $chunk = $config->{video_timers}->[$groupid]->[2];
+
+      next unless (@files);
+
+      my $hassame = 0;
+      for my $id ( 0 .. @files - 2 )
+	{
+	  my $file      = $files[$id];
+	  my $beginhash = get_filetime_hash( $videos, $file, $chunk );
+	  my $endhash   = get_filetime_hash( $videos, $file,
+					     $videos->{$file}->{info}->{length} - $chunk );
+
+	  my $min = $config->{hash_size}->[0] * $config->{hash_size}->[1];
+	  $min = $videos->{$file}->{min_hash}
+	    if ( $videos->{$file}->{min_file} );
+
+	  for my $nextid ( $id + 1 .. @files - 1 )
+	    {
+	      my $nextfile = $files[$nextid];
+
+	      my $compkey = sprintf( "%s:%s",
+				     $videos->{$file}->{phrase},
+				     $videos->{$nextfile}->{phrase} );
+	      next if ( exists $compared_files{$compkey} );
+	      $compared_files{$compkey} = 1;
+
+	      my $nextbeginhash =
+		get_filetime_hash( $videos, $nextfile, $chunk );
+	      my $nextendhash = get_filetime_hash( $videos, $nextfile,
+						   $videos->{$nextfile}->{info}->{length} - $chunk );
+
+	      my $begin = imghash_cmp( $beginhash, $nextbeginhash );
+	      if ( $begin < $min )
+		{
+		  $videos->{$file}->{min_file}  = $nextfile;
+		  $videos->{$file}->{min_hash}  = $begin;
+		  $videos->{$file}->{min_type}  = 0;
+		  $videos->{$file}->{min_chunk} = $chunk;
+		  $min                          = $begin;
+		  $hassame                      = 1;
+                }
+	      my $end = imghash_cmp( $endhash, $nextendhash );
+	      if ( $end < $min )
+		{
+		  $videos->{$file}->{min_file}  = $nextfile;
+		  $videos->{$file}->{min_hash}  = $end;
+		  $videos->{$file}->{min_type}  = 1;
+		  $videos->{$file}->{min_chunk} = $chunk;
+		  $min                          = $end;
+		  $hassame                      = 1;
+                }
+            }
+        }
+
+      next unless ($hassame);
+
+      my @has_files = grep { defined $videos->{$_}->{min_hash} } @files;
+      my @sort_list =
+	sort { $videos->{$a}->{min_hash} <=> $videos->{$b}->{min_hash} }
+          @has_files;
+
+      push @sort_group_files, \@sort_list;
+    }
+
+  return \@sort_group_files;
+}
+
+sub get_screenshot {
+  if ( "\L$config->{player}\E" =~ /mplayer/ )
+    {
+      get_screenshot_by_mplayer(@_);
+    }
+}
+
+sub get_screenshot_by_mplayer {
+  my ( $file, $time, $img ) = @_;
+
+  my ( $name, $dir ) = fileparse($img);
+  make_path($dir);
+
+  my $cmd =
+    "$config->{player} -ss $time -noframedrop -nosound -vo jpeg -frames 1 \"$file\"";
+  unless ( $OsIsWin || $config->{verbose} )
+    {
+      $cmd .= " >/dev/null 2>&1";
+    }
+
+  eval {
+    local $SIG{ALRM} = sub { die "timeout\n" };
+    alarm 5;
+    `$cmd`;
+    alarm 0;
+  };
+  if ($@)
+    {
+      Wx::LogWarning "ERROR: get file \'$file\' screenshot failed\n";
+    }
+
+  move "00000001.jpg", $img;
+}
+
+sub get_filetime_hash {
+  my ( $videos, $file, $timer ) = @_;
+
+  my $imgfile = catfile( $videos->{$file}->{imgdir}, $timer . '.jpg' );
+  $videos->{$file}->{screenshot}->{$timer} = $imgfile;
+
+  if ( exists $cache_hash{$file}->{hash}->{$timer}
+       && $cache_hash{$file}->{hash}->{$timer} )
+    {
+      $videos->{$file}->{hash}->{$timer} =
+	$cache_hash{$file}->{hash}->{$timer};
+      return $videos->{$file}->{hash}->{$timer};
+    }
+
+  get_screenshot( $file, $timer, $imgfile ) unless ( -r $imgfile );
+
+  return unless ( -r $imgfile );
+
+  my $bin = get_image_hash($imgfile);
+
+  $cache_hash{$file}->{hash}->{$timer} = $bin;
+  $videos->{$file}->{hash}->{$timer} = $bin;
+}
+
+sub get_image_hash {
+  my $imgfile = shift;
+
+  my $img = Wx::Image->new( $imgfile, wxBITMAP_TYPE_ANY );
+  $img->Rescale( @{ $config->{hash_size} } );
+
+  my @phrase;
+  for my $w ( 0 .. $img->GetWidth - 1 )
+    {
+      for my $h ( 0 .. $img->GetHeight - 1 )
+	{
+	  my ( $r, $g, $b ) = (
+			       $img->GetRed( $w, $h ),
+			       $img->GetGreen( $w, $h ),
+			       $img->GetBlue( $w, $h )
+			      );
+	  my $ch = ( $r * 30 + $g * 59 + $b * 11 ) / 100;
+	  push @phrase, $ch;
+        }
+    }
+  return unless (@phrase);
+
+  my $sum = 0;
+  for (@phrase)
+    {
+      $sum += $_;
+    }
+  my $avg = $sum / @phrase;
+
+  my ( $binl, $binh ) = ( 0, 0 );
+  for ( 0 .. 31 )
+    {
+      $binl |= ( 1 << $_ ) if ( $phrase[$_] >= $avg );
+    }
+  for ( 0 .. 31 )
+    {
+      $binh |= ( 1 << ($_) ) if ( $phrase[ $_ + 32 ] >= $avg );
+    }
+
+  return pack 'VV', $binh, $binl;
+}
+
+sub imghash_cmp {
+  my ( $bina, $binb ) = @_;
+
+  return $config->{hash_size}->[0] * $config->{hash_size}->[1]
+    unless ( $bina && $binb );
+
+  my ( $binah, $binal ) = unpack 'V2', $bina;
+  my ( $binbh, $binbl ) = unpack 'V2', $binb;
+
+  my $sum = 0;
+  my $odd = int( ( int $binah ) ^ ( int $binbh ) );
+  while ($odd)
+    {
+      $sum++ if ( $odd & 1 );
+      $odd = $odd >> 1;
+    }
+  $odd = int( ( int $binal ) ^ ( int $binbl ) );
+  while ($odd)
+    {
+      $sum++ if ( $odd & 1 );
+      $odd = $odd >> 1;
+    }
+  $sum;
+}
+
+sub video_info_string {
+  my ( $self, $file ) = @_;
+
+  return sprintf
+    "File:%s\nFormat:%s\nLength:%s\nSize:%dx%d\n",
+      basename($file),
+	$self->{videos}->{$file}->{info}->{format},
+	  $self->{videos}->{$file}->{info}->{length},
+	    $self->{videos}->{$file}->{info}->{width},
+	      $self->{videos}->{$file}->{info}->{height};
+}
+
+sub image_info_string {
+  my $file = shift;
+
+  return sprintf
+    "File:%s\nPath:%s\n",
+      basename($file),
+	dirname($file);
+}
+
+sub file_parse {
+  my ( $self, $file ) = @_;
+
+  if ( $config->{proc_video} && is_video($file) )
+    {
+      video_file_parse( $self, $file );
+    }
+  elsif ( $config->{proc_image} && is_image($file) )
+    {
+      image_file_parse( $self, $file );
+    }
+}
+
+sub video_file_parse {
+  my ( $self, $file ) = @_;
+
+  my $info = get_info($file);
+  return unless ($info);
+
+  my %nodes;
+  $nodes{info} = $info;
+  $self->{videos}->{$file} = \%nodes;
+
+  my $phrase = substr sha1_hex($file), 0, 16;
+
+  $nodes{phrase} = $phrase;
+  $nodes{imgdir} =
+    catdir( $config->{workpath}, substr( $phrase, 0, 2 ), $phrase );
+}
+
+sub image_file_parse {
+  my ( $self, $file ) = @_;
+
+  $self->{images}->{$file}->{hash} = get_image_hash($file)
+    unless ( exists $self->{images}->{$file} );
+}
+
+sub is_video {
+  my $file = shift;
+  my ( undef, undef, $suffix ) =
+    fileparse( $file, @{ $config->{video_suffix} } );
+  return 1 if ( "\L$suffix\E" ~~ @{ $config->{video_suffix} } );
+  0;
+}
+
+sub is_image {
+  my $file = shift;
+  my ( undef, undef, $suffix ) =
+    fileparse( $file, @{ $config->{image_suffix} } );
+  return 1 if ( "\L$suffix\E" ~~ @{ $config->{image_suffix} } );
+  0;
+}
+
+sub get_info {
+  if ( "\L$config->{player}\E" =~ /mplayer/ )
+    {
+      return get_info_by_mplayer(@_);
+    }
+}
+
+sub get_info_by_mplayer {
+  my $file = shift;
+  my @mpout;
+
+  my $cmd =
+    "$config->{player} -identify -nosound -vc dummy -vo null \"$file\"";
+  unless ( $OsIsWin || $config->{verbose} )
+    {
+      $cmd .= " 2>/dev/null";
+    }
+
+  eval {
+    local $SIG{ALRM} = sub { die "timeout\n" };
+    alarm 5;
+    @mpout = `$cmd`;
+    alarm 0;
+  };
+  if ($@)
+    {
+      Wx::LogWarning "ERROR: \'$file\' get length error.\n";
+      return;
+    }
+
+  my %info;
+
+  for (@mpout)
+    {
+      given ($_) {
+	$info{format} = $1 when (/(.+) file format detected/);
+	$info{length} = $1 when (/ID_LENGTH=(\d*\.?\d*)/);
+	$info{width}  = $1 when (/ID_VIDEO_WIDTH=(\d+)/);
+	$info{height} = $1 when (/ID_VIDEO_HEIGHT=(\d+)/);
+	default {};
+      }
+    }
+  return \%info;
+}

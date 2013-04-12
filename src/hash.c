@@ -19,28 +19,24 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
-/* @CFILE hash.c
+/* @CFILE ihash.c
  *
  *  Author: Alf <naihe2010@126.com>
  */
 
 #include "hash.h"
-#include "util.h"
 #include "video.h"
+#include "ini.h"
 
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
-#include <math.h>
-
-#define FDUPVES_HASH_LEN 32
-#define FDUPVES_DCT_LEN 8
+#ifdef WIN32
+# include "image-win.h"
+#endif
 
 static hash_t pixbuf_hash (GdkPixbuf *);
-static gboolean buffer_dct (const unsigned char *,
-			    unsigned char *, gsize);
-static const gdouble *get_coefficient ();
-static const gdouble *get_coefficient_t ();
-static void matrix_mul (const gdouble *, const gdouble *,
-			gdouble *);
+
+#define FDUPVES_HASH_LEN 8
 
 hash_t
 file_hash (const char *file)
@@ -50,12 +46,19 @@ file_hash (const char *file)
   GError *err;
 
   err = NULL;
+#ifndef WIN32
   buf = gdk_pixbuf_new_from_file_at_scale (file,
 					   FDUPVES_HASH_LEN,
 					   FDUPVES_HASH_LEN,
 					   FALSE,
 					   &err);
-
+#else
+  buf = gdk_pixbuf_new_from_file_at_scale_wic (file,
+					       FDUPVES_HASH_LEN,
+					       FDUPVES_HASH_LEN,
+					       FALSE,
+					       &err);
+#endif
   if (err)
     {
       g_warning ("Load file: %s to pixbuf failed: %s", file, err->message);
@@ -99,22 +102,57 @@ buffer_hash (const char *buffer, int size)
   return h;
 }
 
-hash_t
-video_time_hash (const char *file, int time)
+static hash_t
+pixbuf_hash (GdkPixbuf *pixbuf)
 {
-  hash_t v;
-  gchar buffer[FDUPVES_HASH_LEN * FDUPVES_HASH_LEN * 3];
+  int width, height, rowstride, n_channels;
+  guchar *pixels, *p;
+  int *grays, sum, avg, x, y, off;
+  hash_t hash;
 
-  video_time_screenshot (file, time,
-			 FDUPVES_HASH_LEN,
-			 FDUPVES_HASH_LEN,
-			 buffer, sizeof buffer);
+  n_channels = gdk_pixbuf_get_n_channels (pixbuf);
 
-  v = buffer_hash (buffer, sizeof buffer);
+  g_assert (gdk_pixbuf_get_colorspace (pixbuf) == GDK_COLORSPACE_RGB);
+  g_assert (gdk_pixbuf_get_bits_per_sample (pixbuf) == 8);
 
-  return v;
+  width = gdk_pixbuf_get_width (pixbuf);
+  height = gdk_pixbuf_get_height (pixbuf);
+
+  rowstride = gdk_pixbuf_get_rowstride (pixbuf);
+  pixels = gdk_pixbuf_get_pixels (pixbuf);
+
+  grays = g_new0 (int, width * height);
+  off = 0;
+  for (y = 0; y < width; ++ y)
+    {
+      for (x = 0; x < height; ++ x)
+	{
+	  p = pixels + y * rowstride + x * n_channels;
+	  grays[off] = (p[0] * 30 + p[1] * 59 + p[2] * 11) / 100;
+	  ++ off;
+	}
+    }
+
+  sum = 0;
+  for (x = 0; x < off; ++ x)
+    {
+      sum += grays[x];
+    }
+  avg = sum / off;
+
+  hash = 0;
+  for (x = 0; x < off; ++ x)
+    {
+      if (grays[x] >= avg)
+	{
+	  hash |= ((hash_t) 1 << x);
+	}
+    }
+
+  g_free (grays);
+
+  return hash;
 }
-
 
 int
 hash_cmp (hash_t a, hash_t b)
@@ -124,7 +162,7 @@ hash_cmp (hash_t a, hash_t b)
 
   if (!a || !b)
     {
-      return FDUPVES_DCT_LEN * FDUPVES_DCT_LEN; /* max invalid distance */
+      return FDUPVES_HASH_LEN * FDUPVES_HASH_LEN; /* max invalid distance */
     }
 
   c = a ^ b;
@@ -139,184 +177,23 @@ hash_cmp (hash_t a, hash_t b)
   return cmp;
 }
 
-static hash_t
-pixbuf_hash (GdkPixbuf *pixbuf)
+hash_t
+video_time_hash (const char *file, int time)
 {
-  int width, height, rowstride, n_channels;
-  guchar *pixels, *p;
-  int sum, avg, x, y, off;
-  hash_t hash;
-  unsigned char *grays,
-    dct[FDUPVES_HASH_LEN * FDUPVES_HASH_LEN],
-    dctc[FDUPVES_DCT_LEN * FDUPVES_DCT_LEN];
+  hash_t v;
+  gchar *buffer;
+  gsize len;
 
-  n_channels = gdk_pixbuf_get_n_channels (pixbuf);
+  len = FDUPVES_HASH_LEN * FDUPVES_HASH_LEN * 3;
+  buffer = g_malloc (len);
+  g_return_val_if_fail (buffer, 0);
 
-  g_assert (gdk_pixbuf_get_colorspace (pixbuf) == GDK_COLORSPACE_RGB);
-  g_assert (gdk_pixbuf_get_bits_per_sample (pixbuf) == 8);
+  video_time_screenshot (file, time,
+			 FDUPVES_HASH_LEN, FDUPVES_HASH_LEN,
+			 buffer, len);
 
-  width = gdk_pixbuf_get_width (pixbuf);
-  height = gdk_pixbuf_get_height (pixbuf);
+  v = buffer_hash (buffer, len);
+  g_free (buffer);
 
-  rowstride = gdk_pixbuf_get_rowstride (pixbuf);
-  pixels = gdk_pixbuf_get_pixels (pixbuf);
-
-  grays = g_new (unsigned char, width * height);
-  off = 0;
-  for (y = 0; y < width; ++ y)
-    {
-      for (x = 0; x < height; ++ x)
-	{
-	  p = pixels + y * rowstride + x * n_channels;
-	  grays[off] = (p[0] * 30 + p[1] * 59 + p[2] * 11) / 100;
-	  ++ off;
-	}
-    }
-
-  buffer_dct (grays, dct, sizeof dct);
-
-  sum = 0;
-  off = 0;
-  for (x = 0; x < FDUPVES_DCT_LEN; ++ x)
-    {
-      for (y = 0; y < FDUPVES_DCT_LEN; ++ y)
-	{
-	  sum += dct[x * FDUPVES_HASH_LEN + y];
-	  dctc[off] = dct[x * FDUPVES_HASH_LEN + y];
-	  ++ off;
-	}
-    }
-  avg = sum / off;
-
-  hash = 0;
-  for (x = 0; x < off; ++ x)
-    {
-      if (dctc[x] >= avg)
-	{
-	  hash |= (((hash_t) 1) << x);
-	}
-    }
-
-  g_free (grays);
-
-  return hash;
-}
-
-static gboolean
-buffer_dct (const unsigned char *pix, unsigned char *out_pix, gsize out_len)
-{
-  const gdouble *quotient, *quotientT;
-  gdouble matrix[FDUPVES_HASH_LEN * FDUPVES_HASH_LEN],
-    temp[FDUPVES_HASH_LEN * FDUPVES_HASH_LEN];
-  gsize i, j;
-
-  g_assert (out_len >= FDUPVES_HASH_LEN * FDUPVES_HASH_LEN);
-
-  for(i = 0; i < FDUPVES_HASH_LEN; i ++)
-    {
-      for(j = 0; j < FDUPVES_HASH_LEN; j ++)
-	{
-	  matrix[i * FDUPVES_HASH_LEN + j] =
-	    (gdouble) (pix[i * FDUPVES_HASH_LEN + j]);
-	}
-    }
-
-  quotient = get_coefficient ();
-  quotientT = get_coefficient_t ();
-
-  matrix_mul (quotient, matrix, temp);
-  matrix_mul (temp, quotientT, matrix);
-
-  for (i = 0; i < FDUPVES_HASH_LEN; i ++)
-    {
-      for (j = 0; j < FDUPVES_HASH_LEN; j ++)
-	{
-	  out_pix[i * FDUPVES_HASH_LEN + j] =
-	    (unsigned char) matrix[i * FDUPVES_HASH_LEN + j];
-	}
-    }
-
-  return TRUE;
-}
-
-static const gdouble *
-get_coefficient_t ()
-{
-  gsize i, j;
-  static gdouble *coeff_s;
-  const gdouble *c;
-
-  if (coeff_s)
-    {
-      return coeff_s;
-    }
-
-  coeff_s = g_new (gdouble, FDUPVES_HASH_LEN * FDUPVES_HASH_LEN);
-  g_assert (coeff_s);
-
-  c = get_coefficient ();
-
-  for (i = 0; i < FDUPVES_HASH_LEN; i ++)
-    {
-      for (j = 0; j < FDUPVES_HASH_LEN; j ++)
-	{
-	  coeff_s[i * FDUPVES_HASH_LEN + j] =
-	    c[j * FDUPVES_HASH_LEN + i];
-	}
-    }
-
-  return coeff_s;
-}
-
-static const gdouble *
-get_coefficient ()
-{
-  gsize i, j;
-  static gdouble *coeff_s = NULL;
-  gdouble s;
-
-  if (coeff_s)
-    {
-      return coeff_s;
-    }
-
-  coeff_s = g_new (gdouble, FDUPVES_HASH_LEN * FDUPVES_HASH_LEN);
-  g_assert (coeff_s);
-
-  s = 1.0 / sqrt (FDUPVES_HASH_LEN);
-  for (i = 0; i < FDUPVES_HASH_LEN; i ++)
-    {
-      coeff_s[i] = s;
-    }
-  for (i = 1; i < FDUPVES_HASH_LEN; i ++)
-    {
-      for (j = 0; j < FDUPVES_HASH_LEN; j ++)
-	{
-	  coeff_s[i * FDUPVES_HASH_LEN + j] = sqrt (2.0 / FDUPVES_HASH_LEN)
-	    * cos (i * M_PI * (j + 0.5) / (gdouble) FDUPVES_HASH_LEN);
-	}
-    }
-
-  return coeff_s;
-}
-
-static void
-matrix_mul (const gdouble *A, const gdouble *B, gdouble *matrix)
-{
-  gdouble t;
-  gsize i, j, k;
-
-  for (i = 0; i < FDUPVES_HASH_LEN; i ++)
-    {
-      for (j = 0; j < FDUPVES_HASH_LEN; j ++)
-	{
-	  t = 0.0;
-	  for (k = 0; k < FDUPVES_HASH_LEN; k ++)
-	    {
-	      t += A[i * FDUPVES_HASH_LEN + k]
-		* B[k * FDUPVES_HASH_LEN + j];
-	    }
-	  matrix[i * FDUPVES_HASH_LEN + j] = t;
-	}
-    }
+  return v;
 }

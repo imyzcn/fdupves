@@ -61,6 +61,7 @@ struct st_find
 static void vfind_prepare (const gchar *, struct st_find *);
 static int vfind_time_hash (struct st_file *, int, int);
 static void st_file_free (struct st_file *);
+static gboolean is_image_same (const gchar *, const gchar *);
 static gboolean is_video_same (struct st_file *, struct st_file *, gboolean);
 
 int
@@ -95,12 +96,16 @@ find_images (GPtrArray *ptr, find_step_cb cb, gpointer arg)
 	  dist = hash_cmp (hashs[i], hashs[j]);
 	  if (dist < g_ini->same_image_distance)
 	    {
-	      step->found = TRUE;
 	      step->afile = g_ptr_array_index (ptr, i);
 	      step->bfile = g_ptr_array_index (ptr, j);
-	      step->type = FD_SAME_IMAGE;
-	      cb (step, arg);
-	      ++ count;
+
+	      if (is_image_same (step->afile, step->bfile))
+		{
+		  step->found = TRUE;
+		  step->type = FD_SAME_IMAGE;
+		  cb (step, arg);
+		  ++ count;
+		}
 	    }
 	}
 
@@ -264,6 +269,26 @@ vfind_prepare (const gchar *file, struct st_find *find)
 }
 
 static gboolean
+is_image_same (const gchar *afile, const gchar *bfile)
+{
+  hash_t hasha, hashb;
+  int dist;
+
+  hasha = file_phash (afile);
+  hashb = file_phash (bfile);
+  dist = hash_cmp (hasha, hashb);
+
+  if (dist < g_ini->same_image_distance)
+    {
+      return TRUE;
+    }
+  else
+    {
+      return FALSE;
+    }
+}
+
+static gboolean
 is_video_same (struct st_file *afile, struct st_file *bfile, gboolean tail)
 {
   int seeka[FD_VIDEO_COMP_CNT], seekb[FD_VIDEO_COMP_CNT];
@@ -295,8 +320,8 @@ is_video_same (struct st_file *afile, struct st_file *bfile, gboolean tail)
 
   for (i = 0; i < FD_VIDEO_COMP_CNT; ++ i)
     {
-      hasha = video_time_hash (afile->file, seeka[i]);
-      hashb = video_time_hash (bfile->file, seekb[i]);
+      hasha = video_time_phash (afile->file, seeka[i]);
+      hashb = video_time_phash (bfile->file, seekb[i]);
       if (hash_cmp (hasha, hashb) >= g_ini->same_video_distance)
 	{
 	  return FALSE;

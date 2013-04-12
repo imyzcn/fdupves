@@ -1,3 +1,9 @@
+Klara.0.7
+* using faster method to find 'maybe similar' file
+
+Klara.0.6
+* using DCT hash (phash) method to find file
+
 Klara.0.5
 * find files more quickly
 * fix the 'can\'t get duration of file' error
