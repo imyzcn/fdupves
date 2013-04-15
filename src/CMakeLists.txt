@@ -7,6 +7,7 @@ SET (HEADERS
   hash.h
   find.h
   video.h
+  image.h
   )
 
 SET (SOURCES
@@ -17,6 +18,7 @@ SET (SOURCES
   phash.c
   find.c
   video.c
+  image.c
   main.c
   )
 

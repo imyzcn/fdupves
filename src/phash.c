@@ -27,6 +27,7 @@
 #include "hash.h"
 #include "util.h"
 #include "video.h"
+#include "image.h"
 
 #include <glib.h>
 #include <math.h>
@@ -50,11 +51,10 @@ file_phash (const char *file)
   GError *err;
 
   err = NULL;
-  buf = gdk_pixbuf_new_from_file_at_scale (file,
-					   FDUPVES_PHASH_LEN,
-					   FDUPVES_PHASH_LEN,
-					   FALSE,
-					   &err);
+  buf = fdupves_gdkpixbuf_load_file_at_size (file,
+					     FDUPVES_PHASH_LEN,
+					     FDUPVES_PHASH_LEN,
+					     &err);
 
   if (err)
     {

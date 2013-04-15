@@ -28,6 +28,7 @@
 #include "util.h"
 #include "ini.h"
 #include "video.h"
+#include "image.h"
 #include "find.h"
 #include "gui.h"
 
@@ -1399,11 +1400,10 @@ image2widget (const file_node *fn)
   g_free (desc);
 
   err = NULL;
-  pixbuf = gdk_pixbuf_new_from_file_at_scale (fn->path,
-					      g_ini->thumb_size[0],
-					      g_ini->thumb_size[1],
-					      FALSE,
-					      &err);
+  pixbuf = fdupves_gdkpixbuf_load_file_at_size (fn->path,
+						g_ini->thumb_size[0],
+						g_ini->thumb_size[1],
+						&err);
   if (err)
     {
       g_warning ("load image: %s error: %s", fn->path, err->message);

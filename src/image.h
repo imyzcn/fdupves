@@ -23,12 +23,11 @@
  *
  *  Author: Alf <naihe2010@126.com>
  */
-
-#ifndef _FDUPVES_IMAGE_WIN_H_
-#define _FDUPVES_IMAGE_WIN_H_
+#ifndef _FDUPVES_IMAGE_H_
+#define _FDUPVES_IMAGE_H_
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
-GdkPixbuf * gdk_pixbuf_new_from_file_at_scale_wic (const gchar *, gint, gint, gboolean, GError **);
+GdkPixbuf * fdupves_gdkpixbuf_load_file_at_size (const gchar *, int, int, GError **);
 
 #endif

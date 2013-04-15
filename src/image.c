@@ -19,16 +19,57 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
-/* @CFILE image.h
+/* @CFILE image.c
  *
  *  Author: Alf <naihe2010@126.com>
  */
 
-#ifndef _FDUPVES_IMAGE_WIN_H_
-#define _FDUPVES_IMAGE_WIN_H_
-
-#include <gdk-pixbuf/gdk-pixbuf.h>
-
-GdkPixbuf * gdk_pixbuf_new_from_file_at_scale_wic (const gchar *, gint, gint, gboolean, GError **);
-
+#include "image.h"
+#ifdef WIN32
+#include "image-win.h"
 #endif
+
+GdkPixbuf *
+fdupves_gdkpixbuf_load_file_at_size (const gchar *file, int w, int h, GError **error)
+{
+  GdkPixbuf *buf;
+#ifdef WIN32
+  int width, height;
+  GdkPixbufFormat *format;
+
+  width = 0;
+  height = 0;
+
+  format = gdk_pixbuf_get_file_info (file,
+				     &width, &height);
+  if (format == NULL)
+    {
+      g_warning ("Get file: %s infomation failed.", file);
+    }
+#endif
+
+  if (error)
+    {
+      *error = NULL;
+    }
+#ifdef WIN32
+  if (width > 2000 && height > 2000)
+    {
+      buf = gdk_pixbuf_new_from_file_at_scale_wic (file,
+						   w,
+						   h,
+						   FALSE,
+						   error);
+    }
+  else
+#endif
+    {
+      buf = gdk_pixbuf_new_from_file_at_scale (file,
+					       w,
+					       h,
+					       FALSE,
+					       error);
+    }
+
+  return buf;
+}

@@ -26,13 +26,11 @@
 
 #include "hash.h"
 #include "video.h"
+#include "image.h"
 #include "ini.h"
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
-#ifdef WIN32
-# include "image-win.h"
-#endif
 
 static hash_t pixbuf_hash (GdkPixbuf *);
 
@@ -45,20 +43,10 @@ file_hash (const char *file)
   hash_t h;
   GError *err;
 
-  err = NULL;
-#ifndef WIN32
-  buf = gdk_pixbuf_new_from_file_at_scale (file,
-					   FDUPVES_HASH_LEN,
-					   FDUPVES_HASH_LEN,
-					   FALSE,
-					   &err);
-#else
-  buf = gdk_pixbuf_new_from_file_at_scale_wic (file,
-					       FDUPVES_HASH_LEN,
-					       FDUPVES_HASH_LEN,
-					       FALSE,
-					       &err);
-#endif
+  buf = fdupves_gdkpixbuf_load_file_at_size (file,
+					     FDUPVES_HASH_LEN,
+					     FDUPVES_HASH_LEN,
+					     &err);
   if (err)
     {
       g_warning ("Load file: %s to pixbuf failed: %s", file, err->message);
