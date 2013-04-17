@@ -1,6 +1,6 @@
 /*
  * This file is part of the fdupves package
- * Copyright (C) <2010>  <Alf>
+ * Copyright (C) <2008> Alf
  *
  * Contact: Alf <naihe2010@126.com>
  *
@@ -19,53 +19,36 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
-/* @CFILE fdini.h
+/* @CFILE cache.h
  *
  *  Author: Alf <naihe2010@126.com>
  */
-/* @date Created: 2013/01/16 11:02:08 Alf*/
 
-#ifndef _FDUPVES_INI_H_
-#define _FDUPVES_INI_H_
+#ifndef _FDUPVES_CACHE_H_
+#define _FDUPVES_CACHE_H_
+
+#include "hash.h"
 
 #include <glib.h>
 
-typedef struct
-{
-  gboolean verbose;
+typedef struct cache_s cache_t;
 
-  gboolean proc_image;
-  gchar image_suffix[0x100][6];
+cache_t * cache_new (const gchar *);
 
-  gboolean proc_video;
-  gchar video_suffix[0x100][6];
+gboolean cache_load (cache_t *, const gchar *);
 
-  gboolean proc_other;
+void cache_free (cache_t *);
 
-  gint compare_count;
+gboolean cache_has (cache_t *, const gchar *, int, int);
 
-  gint same_video_distance;
-  gint same_image_distance;
+gboolean cache_get (cache_t *, const gchar *, int, int, hash_t *);
 
-  gint thumb_size[2];
+gboolean cache_set (cache_t *, const gchar *, int, int, hash_t);
 
-  gint video_timers[0x10][3];
+gboolean cache_remove (cache_t *, const gchar *);
 
-  gchar *cache_file;
+gboolean cache_save (cache_t *, const gchar *);
 
-  /* Private values */
-  GKeyFile *keyfile;
-
-} ini_t;
-
-extern ini_t * g_ini;
-
-ini_t * ini_new ();
-
-ini_t * ini_new_with_file (const gchar *);
-
-gboolean ini_load (ini_t *, const gchar *);
-
-gboolean ini_save (ini_t *, const gchar *);
+extern cache_t *g_cache;
 
 #endif

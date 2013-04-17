@@ -27,6 +27,14 @@
 #ifndef _FDUPVES_HASH_H_
 #define _FDUPVES_HASH_H_
 
+enum hash_type
+  {
+    FDUPVES_HASH_HASH,
+    FDUPVES_HASH_PHASH,
+    FDUPVES_HASH_ALGS_CNT,
+  };
+extern const char *hash_phrase[];
+
 typedef unsigned long long hash_t;
 
 hash_t file_hash (const char *);

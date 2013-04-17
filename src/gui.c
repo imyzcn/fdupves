@@ -31,6 +31,7 @@
 #include "image.h"
 #include "find.h"
 #include "gui.h"
+#include "cache.h"
 
 #include <glib/gstdio.h>
 #include <glib.h>
@@ -1968,6 +1969,11 @@ file_node_free_full (file_node *fn)
   same_node *node;
 
   node = fn->node;
+
+  if (g_cache)
+    {
+      cache_remove (g_cache, fn->path);
+    }
 
   file_node_free (fn);
   node->files = g_slist_remove (node->files, fn);

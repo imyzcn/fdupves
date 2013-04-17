@@ -28,9 +28,16 @@
 #include "video.h"
 #include "image.h"
 #include "ini.h"
+#include "cache.h"
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
+
+const char *hash_phrase[] =
+  {
+    "hash",
+    "phash",
+  };
 
 static hash_t pixbuf_hash (GdkPixbuf *);
 
@@ -42,6 +49,14 @@ file_hash (const char *file)
   GdkPixbuf *buf;
   hash_t h;
   GError *err;
+
+  if (g_cache)
+    {
+      if (cache_get (g_cache, file, 0, FDUPVES_HASH_HASH, &h))
+	{
+	  return h;
+	}
+    }
 
   buf = fdupves_gdkpixbuf_load_file_at_size (file,
 					     FDUPVES_HASH_LEN,
@@ -56,6 +71,14 @@ file_hash (const char *file)
 
   h = pixbuf_hash (buf);
   g_object_unref (buf);
+
+  if (g_cache)
+    {
+      if (h)
+	{
+	  cache_set (g_cache, file, 0, FDUPVES_HASH_HASH, h);
+	}
+    }
 
   return h;
 }
@@ -168,9 +191,17 @@ hash_cmp (hash_t a, hash_t b)
 hash_t
 video_time_hash (const char *file, int time)
 {
-  hash_t v;
+  hash_t h;
   gchar *buffer;
   gsize len;
+
+  if (g_cache)
+    {
+      if (cache_get (g_cache, file, time, FDUPVES_HASH_HASH, &h))
+	{
+	  return h;
+	}
+    }
 
   len = FDUPVES_HASH_LEN * FDUPVES_HASH_LEN * 3;
   buffer = g_malloc (len);
@@ -180,8 +211,16 @@ video_time_hash (const char *file, int time)
 			 FDUPVES_HASH_LEN, FDUPVES_HASH_LEN,
 			 buffer, len);
 
-  v = buffer_hash (buffer, len);
+  h = buffer_hash (buffer, len);
   g_free (buffer);
 
-  return v;
+  if (g_cache)
+    {
+      if (h)
+	{
+	  cache_set (g_cache, file, time, FDUPVES_HASH_HASH, h);
+	}
+    }
+
+  return h;
 }

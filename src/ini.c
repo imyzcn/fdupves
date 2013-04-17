@@ -131,6 +131,11 @@ ini_new ()
   ini->video_timers[3][2] = 600;
   ini->video_timers[4][0] = 0;
 
+  ini->cache_file = g_build_filename (g_get_home_dir (),
+				      ".cache",
+				      "fdupves",
+				      NULL);
+
   return ini;
 }
 

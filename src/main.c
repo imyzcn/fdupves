@@ -28,6 +28,7 @@
 #include "gui.h"
 #include "ini.h"
 #include "util.h"
+#include "cache.h"
 
 #include <libavformat/avformat.h>
 
@@ -51,6 +52,8 @@
 #ifdef FDUPVES_ENABLE_PROFILER
 #include <google/profiler.h>
 #endif
+
+static void fdupves_cleanup ();
 
 int
 main (int argc, char *argv[])
@@ -95,6 +98,9 @@ main (int argc, char *argv[])
 
   gui_init (argc, argv);
 
+  cache_new (g_ini->cache_file);
+  atexit (fdupves_cleanup);
+
   gdk_threads_enter ();
 #ifdef FDUPVES_ENABLE_PROFILER
   ProfilerStart ("fdupves.prof");
@@ -106,4 +112,14 @@ main (int argc, char *argv[])
   gdk_threads_leave ();
 
   return 0;
+}
+
+static void
+fdupves_cleanup ()
+{
+  if (g_cache)
+    {
+      cache_save (g_cache, g_ini->cache_file);
+      cache_free (g_cache);
+    }
 }

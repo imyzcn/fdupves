@@ -8,6 +8,7 @@ SET (HEADERS
   find.h
   video.h
   image.h
+  cache.h
   )
 
 SET (SOURCES
@@ -19,6 +20,7 @@ SET (SOURCES
   find.c
   video.c
   image.c
+  cache.c
   main.c
   )
 

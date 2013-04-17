@@ -28,6 +28,7 @@
 #include "util.h"
 #include "video.h"
 #include "image.h"
+#include "cache.h"
 
 #include <glib.h>
 #include <math.h>
@@ -50,6 +51,14 @@ file_phash (const char *file)
   hash_t h;
   GError *err;
 
+  if (g_cache)
+    {
+      if (cache_get (g_cache, file, 0, FDUPVES_HASH_PHASH, &h))
+	{
+	  return h;
+	}
+    }
+
   err = NULL;
   buf = fdupves_gdkpixbuf_load_file_at_size (file,
 					     FDUPVES_PHASH_LEN,
@@ -65,6 +74,14 @@ file_phash (const char *file)
 
   h = pixbuf_phash (buf);
   g_object_unref (buf);
+
+  if (g_cache)
+    {
+      if (h)
+	{
+	  cache_set (g_cache, file, 0, FDUPVES_HASH_PHASH, h);
+	}
+    }
 
   return h;
 }
@@ -102,17 +119,33 @@ buffer_phash (const char *buffer, int size)
 hash_t
 video_time_phash (const char *file, int time)
 {
-  hash_t v;
+  hash_t h;
   gchar buffer[FDUPVES_PHASH_LEN * FDUPVES_PHASH_LEN * 3];
+
+  if (g_cache)
+    {
+      if (cache_get (g_cache, file, time, FDUPVES_HASH_PHASH, &h))
+	{
+	  return h;
+	}
+    }
 
   video_time_screenshot (file, time,
 			 FDUPVES_PHASH_LEN,
 			 FDUPVES_PHASH_LEN,
 			 buffer, sizeof buffer);
 
-  v = buffer_phash (buffer, sizeof buffer);
+  h = buffer_phash (buffer, sizeof buffer);
 
-  return v;
+  if (g_cache)
+    {
+      if (h)
+	{
+	  cache_set (g_cache, file, time, FDUPVES_HASH_PHASH, h);
+	}
+    }
+
+  return h;
 }
 
 static hash_t
