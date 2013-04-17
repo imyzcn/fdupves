@@ -27,6 +27,7 @@
 #include "cache.h"
 
 #include <glib.h>
+#include <glib/gstdio.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -256,6 +257,7 @@ cache_save (cache_t *cache, const gchar *file)
 {
   FILE *fp;
   char *localfile;
+  char *dirname;
 
   if (file == NULL)
     {
@@ -264,6 +266,13 @@ cache_save (cache_t *cache, const gchar *file)
 
   localfile = g_locale_from_utf8 (file, -1, NULL, NULL, NULL);
   g_return_val_if_fail (localfile, FALSE);
+
+  dirname = g_path_get_dirname (file);
+  if (dirname)
+    {
+      g_mkdir_with_parents (dirname, 0755);
+      g_free (dirname);
+    }
 
   fp = fopen (localfile, "wb");
   if (fp == NULL)
