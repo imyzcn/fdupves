@@ -121,6 +121,9 @@ video_time_phash (const char *file, int time)
 {
   hash_t h;
   gchar buffer[FDUPVES_PHASH_LEN * FDUPVES_PHASH_LEN * 3];
+#ifdef _DEBUG
+  gchar *basename, outfile[PATH_MAX];
+#endif
 
   if (g_cache)
     {
@@ -134,6 +137,17 @@ video_time_phash (const char *file, int time)
 			 FDUPVES_PHASH_LEN,
 			 FDUPVES_PHASH_LEN,
 			 buffer, sizeof buffer);
+#ifdef _DEBUG
+  basename = g_path_get_basename (file);
+  g_snprintf (outfile, sizeof outfile, "%s/%s-%d.png",
+	      g_get_tmp_dir (),
+	      basename, time);
+  g_free (basename);
+  video_time_screenshot_file (file, time,
+			      FDUPVES_PHASH_LEN * 100,
+			      FDUPVES_PHASH_LEN * 100,
+			      outfile);
+#endif
 
   h = buffer_phash (buffer, sizeof buffer);
 
