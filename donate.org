@@ -2,6 +2,7 @@ Donate
 
 If you like fdupves and you want to do something for me, you can register one of these services below. 
 
-I used these for sync my files. So, if you signed up, the service providers will give me more space. :)
+I used these for sync my Notes/files. So, if you signed up, the service providers will give me more space. :)
 
+ - [[https://app.yinxiang.com/referral/Registration.action?uid%3D3282476&sig%3D78e39e818d59f9d912280301baeced62][EverNote]]
  - [[http://db.tt/y7zOvVx][Dropbox]]
