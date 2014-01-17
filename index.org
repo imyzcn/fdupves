@@ -1,4 +1,4 @@
-fdupves - find duplicate video/image files
+#+TITLE: fdupves - find duplicate video/image files
 
 #+BEGIN_HTML
 <br>

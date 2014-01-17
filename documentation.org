@@ -1,2 +1,2 @@
-fdupves - find duplicate video/image files - Documentaion
+#+TITLE: fdupves - find duplicate video/image files - Documentaion
 

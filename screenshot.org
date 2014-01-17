@@ -1,4 +1,4 @@
-fdupves - find duplicate video/image files - Screenshot
+#+TITLE: fdupves - find duplicate video/image files - Screenshot
 
 * Startup
 [[./images/fdupves-Klara.0.1-startup.png]]
