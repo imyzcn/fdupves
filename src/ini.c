@@ -46,6 +46,7 @@ ini_new ()
       ".gif",
       ".jpeg",
       ".jpg",
+      ".jpe",
       ".png",
       ".pcx",
       ".pnm",
