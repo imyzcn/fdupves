@@ -76,6 +76,7 @@ ini_new ()
       ".flv",
       ".mod",
       ".swf",
+      ".mts",
     };
 
   ini = g_malloc0 (sizeof (ini_t));
