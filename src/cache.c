@@ -175,6 +175,8 @@ cache_load (cache_t *cache, const char *filename)
   //strip the version line. now this is not used.
   fgets (line, sizeof line, fp);
 
+  alg = 0;
+  off = 0;
   while (read_hash (file, &off, &alg, value, fp))
     {
       if (g_file_test (file, G_FILE_TEST_IS_REGULAR))

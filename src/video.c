@@ -32,6 +32,7 @@
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
+#include <libavutil/frame.h>
 
 #include <glib.h>
 
@@ -182,17 +183,28 @@ video_time_screenshot (const char *file, int time,
       return -1;
     }
 
+#if FF_API_AVFRAME_LAVC
+  frame = av_frame_alloc ();
+#else
   frame = avcodec_alloc_frame ();
+#endif
   if (frame == NULL)
     {
       avcodec_close (codec_ctx);
       avformat_close_input (&format_ctx);
       return -1;
     }
+#if FF_API_AVFRAME_LAVC
+  frame_rgb = av_frame_alloc ();
+#else
   frame_rgb = avcodec_alloc_frame ();
+#endif
   if(frame_rgb == NULL)
     {
+#if FF_API_AVFRAME_LAVC
+#else
       avcodec_free_frame (&frame);
+#endif
       avcodec_close (codec_ctx);
       avformat_close_input (&format_ctx);
       return -1;
@@ -201,8 +213,13 @@ video_time_screenshot (const char *file, int time,
   bytes = avpicture_get_size (PIX_FMT_RGB24, width, height);
   if (buf_len < bytes)
     {
+#if FF_API_AVFRAME_LAVC
+      av_frame_free (&frame);
+      av_frame_free (&frame_rgb);
+#else
       avcodec_free_frame (&frame);
       avcodec_free_frame (&frame_rgb);
+#endif
       avcodec_close (codec_ctx);
       avformat_close_input (&format_ctx);
       return -1;
