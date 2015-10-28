@@ -177,6 +177,27 @@ hash_cmp (hash_t a, hash_t b)
     }
 
   c = a ^ b;
+  switch (g_ini->compare_area)
+    {
+    case 1:
+      c = c & 0xFFFFFF00ULL;
+      break;
+
+    case 2:
+      c = c & 0x00FFFFFFULL;
+      break;
+
+    case 3:
+      c = c & 0xFCFCFCFCULL;
+      break;
+
+    case 4:
+      c = c & 0x3F3F3F3FULL;
+      break;
+
+    default:
+      break;
+    }
   for (cmp = 0; c; c = c >> 1)
     {
       if (c & 1)

@@ -99,7 +99,6 @@ main (int argc, char *argv[])
   gui_init (argc, argv);
 
   cache_new (g_ini->cache_file);
-  atexit (fdupves_cleanup);
 
   gdk_threads_enter ();
 #ifdef FDUPVES_ENABLE_PROFILER
@@ -110,6 +109,8 @@ main (int argc, char *argv[])
   ProfilerStop ();
 #endif
   gdk_threads_leave ();
+
+  fdupves_cleanup ();
 
   return 0;
 }

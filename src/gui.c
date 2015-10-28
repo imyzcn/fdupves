@@ -395,11 +395,18 @@ gui_vbutcb (GtkWidget *but, gui_t *gui)
 }
 
 static void
+gui_compareareacb(GtkWidget *combo, gui_t *gui)
+{
+  g_ini->compare_area = gtk_combo_box_get_active
+    (GTK_COMBO_BOX (combo));
+}
+
+static void
 mainframe_new (gui_t *gui)
 {
   GtkWidget *hpaned, *vpaned, *vbox, *hbox, *dirview, *win;
   GtkWidget *typebox, *typeibut, *typevbut;
-  GtkWidget *entry, *combo;
+  GtkWidget *entry, *combo, *comparearea;
   GtkTreeViewColumn *column;
   GtkCellRenderer *renderer;
 
@@ -446,6 +453,19 @@ mainframe_new (gui_t *gui)
   gtk_box_pack_start (GTK_BOX (typebox), typevbut, FALSE, FALSE, 2);
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (typevbut), g_ini->proc_video);
   g_signal_connect (G_OBJECT (typevbut), "toggled", G_CALLBACK (gui_vbutcb), gui);
+
+  typebox = gtk_hbox_new (TRUE, 2);
+  gtk_box_pack_end (GTK_BOX (vbox), typebox, FALSE, FALSE, 2);
+
+  comparearea = gtk_combo_box_text_new ();
+  gtk_box_pack_start (GTK_BOX (typebox), comparearea, FALSE, FALSE, 2);
+  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comparearea), _ ("Compare all"));
+  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comparearea), _ ("Compare top"));
+  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comparearea), _ ("Compare bottom"));
+  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comparearea), _ ("Compare left"));
+  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comparearea), _ ("Compare right"));
+  g_signal_connect (G_OBJECT (comparearea), "changed", G_CALLBACK (gui_compareareacb), gui);
+  gtk_combo_box_set_active (GTK_COMBO_BOX (comparearea), g_ini->compare_area);
 
   /* log win */
   win = gtk_scrolled_window_new (NULL, NULL);

@@ -111,6 +111,8 @@ ini_new ()
 
   ini->proc_other = FALSE;
 
+  ini->compare_area = 0;
+
   ini->compare_count = 4;
 
   ini->same_image_distance = 5;
@@ -191,6 +193,15 @@ ini_load (ini_t *ini, const gchar *file)
 						"proc_video",
 						NULL);
     }
+
+  if (g_key_file_has_key (ini->keyfile, "_", "compare_area", NULL))
+    {
+      ini->compare_area = g_key_file_get_integer (ini->keyfile,
+                                                  "_",
+                                                  "compare_area",
+                                                  NULL);
+    }
+
   if (g_key_file_has_key (ini->keyfile, "_", "compare_count", NULL))
     {
       ini->compare_count = g_key_file_get_integer (ini->keyfile,
@@ -213,6 +224,7 @@ ini_save (ini_t *ini, const gchar *file)
 
   g_key_file_set_boolean (ini->keyfile, "_", "proc_image", ini->proc_image);
   g_key_file_set_boolean (ini->keyfile, "_", "proc_video", ini->proc_video);
+  g_key_file_set_integer (ini->keyfile, "_", "compare_area", ini->compare_area);
   g_key_file_set_integer (ini->keyfile, "_", "compare_count", ini->compare_count);
 
   data = g_key_file_to_data (ini->keyfile, &len, NULL);
