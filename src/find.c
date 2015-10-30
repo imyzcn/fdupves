@@ -271,21 +271,7 @@ vfind_prepare (const gchar *file, struct st_find *find)
 static gboolean
 is_image_same (const gchar *afile, const gchar *bfile)
 {
-  hash_t hasha, hashb;
-  int dist;
-
-  hasha = file_phash (afile);
-  hashb = file_phash (bfile);
-  dist = hash_cmp (hasha, hashb);
-
-  if (dist < g_ini->same_image_distance)
-    {
-      return TRUE;
-    }
-  else
-    {
-      return FALSE;
-    }
+  return TRUE;
 }
 
 static gboolean
