@@ -134,9 +134,9 @@ pixbuf_hash (GdkPixbuf *pixbuf)
 
   grays = g_new0 (int, width * height);
   off = 0;
-  for (y = 0; y < width; ++ y)
+  for (y = 0; y < height; ++ y)
     {
-      for (x = 0; x < height; ++ x)
+      for (x = 0; x < width; ++ x)
 	{
 	  p = pixels + y * rowstride + x * n_channels;
 	  grays[off] = (p[0] * 30 + p[1] * 59 + p[2] * 11) / 100;
