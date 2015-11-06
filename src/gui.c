@@ -645,6 +645,12 @@ gui_add_cb (GtkWidget *wid, gui_t *gui)
 static void
 gui_find_cb (GtkWidget *wid, gui_t *gui)
 {
+#if GLIB_CHECK_VERSION(2, 32, 0)
+  GThread *th;
+
+  th = g_thread_try_new ("find", (GThreadFunc) gui_find_thread, gui, NULL);
+  g_thread_unref (th);
+#else
   g_thread_create_full ((GThreadFunc) gui_find_thread,
 			gui,
 			FDUPVES_THREAD_STACK_SIZE,
@@ -652,6 +658,7 @@ gui_find_cb (GtkWidget *wid, gui_t *gui)
 			FALSE,
 			0,
 			NULL);
+#endif
 }
 
 static void

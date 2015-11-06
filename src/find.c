@@ -306,8 +306,8 @@ is_video_same (struct st_file *afile, struct st_file *bfile, gboolean tail)
 
   for (i = 0; i < FD_VIDEO_COMP_CNT; ++ i)
     {
-      hasha = video_time_phash (afile->file, seeka[i]);
-      hashb = video_time_phash (bfile->file, seekb[i]);
+      hasha = video_time_hash (afile->file, seeka[i]);
+      hashb = video_time_hash (bfile->file, seekb[i]);
       if (hash_cmp (hasha, hashb) >= g_ini->same_video_distance)
 	{
 	  return FALSE;

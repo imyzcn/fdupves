@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: acnchess 0.0.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2015-01-26 13:59+0800\n"
+"POT-Creation-Date: 2015-12-31 18:08+0000\n"
 "PO-Revision-Date: 2011-09-05 11:12+0800\n"
 "Last-Translator: Alf <naihe2010@126.com>\n"
 "Language-Team: Alf <naihe2010@126.com>\n"
@@ -16,233 +16,258 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/find.c:82
-msgid "Generate image hash value"
-msgstr "生成图片哈希值"
-
-#: /home/pengda/private/Nutstore/project/fdupves/src/find.c:90
-msgid "Compare image hash value"
-msgstr "比较图片哈希值"
-
-#: /home/pengda/private/Nutstore/project/fdupves/src/find.c:142
-msgid "Generate video screenshot hash value"
-msgstr "生成视频截图哈希值"
-
-#: /home/pengda/private/Nutstore/project/fdupves/src/find.c:149
-msgid "Compare video screenshot hash value"
-msgstr "比较视频截图哈希值"
-
-#: /home/pengda/private/Nutstore/project/fdupves/src/video.c:50
-#: /home/pengda/private/Nutstore/project/fdupves/src/video.c:141
+#: /home/p/private/Nutstore/project/fdupves/src/video.c:50
+#: /home/p/private/Nutstore/project/fdupves/src/video.c:141
 #, c-format
 msgid "could not open: %s"
 msgstr "不能打开：%s"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/video.c:56
-#: /home/pengda/private/Nutstore/project/fdupves/src/video.c:147
+#: /home/p/private/Nutstore/project/fdupves/src/video.c:56
+#: /home/p/private/Nutstore/project/fdupves/src/video.c:147
 #, c-format
 msgid "could not find stream infomations: %s"
 msgstr "不能找到流信息：%s"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/video.c:72
-#: /home/pengda/private/Nutstore/project/fdupves/src/video.c:164
+#: /home/p/private/Nutstore/project/fdupves/src/video.c:72
+#: /home/p/private/Nutstore/project/fdupves/src/video.c:164
 #, c-format
 msgid "could not find video stream: %s"
 msgstr "不能找到视频流：%s"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/video.c:176
+#: /home/p/private/Nutstore/project/fdupves/src/video.c:176
 #, c-format
 msgid "Unsupported codec: %s"
 msgstr "不支持的格式：%s"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/video.c:277
+#: /home/p/private/Nutstore/project/fdupves/src/video.c:277
 msgid "Cannot initialize sws conversion context"
 msgstr "不能初使化转图形转化器"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:307
+#: /home/p/private/Nutstore/project/fdupves/src/find.c:82
+msgid "Generate image hash value"
+msgstr "生成图片哈希值"
+
+#: /home/p/private/Nutstore/project/fdupves/src/find.c:90
+msgid "Compare image hash value"
+msgstr "比较图片哈希值"
+
+#: /home/p/private/Nutstore/project/fdupves/src/find.c:142
+msgid "Generate video screenshot hash value"
+msgstr "生成视频截图哈希值"
+
+#: /home/p/private/Nutstore/project/fdupves/src/find.c:149
+msgid "Compare video screenshot hash value"
+msgstr "比较视频截图哈希值"
+
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:307
 msgid "Add"
 msgstr "添加"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:309
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:309
 msgid "Add Source Files"
 msgstr "加入源文件"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:316
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:316
 msgid "Find"
 msgstr "查找"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:318
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:318
 msgid "Find Duplicate Files"
 msgstr "查找重复文件"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:325
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:325
 msgid "Delete Selected"
 msgstr "删除选中"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:327
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:327
 msgid "Delete the selected files"
 msgstr "删除选中的文件"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:334
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:336
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:334
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:336
 msgid "Preference"
 msgstr "首选项"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:343
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:343
 msgid "Help"
 msgstr "帮助"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:344
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:344
 msgid "Help infomations"
 msgstr "帮助信息"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:429
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:436
 msgid "Source Dir"
 msgstr "源目录"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:440
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:447
 msgid "Image"
 msgstr "图片"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:445
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:452
 msgid "Video"
 msgstr "视频"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:463
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:462
+#, fuzzy
+msgid "Compare all"
+msgstr "比较次数"
+
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:463
+#, fuzzy
+msgid "Compare top"
+msgstr "比较次数"
+
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:464
+#, fuzzy
+msgid "Compare bottom"
+msgstr "比较次数"
+
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:465
+#, fuzzy
+msgid "Compare left"
+msgstr "比较次数"
+
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:466
+#, fuzzy
+msgid "Compare right"
+msgstr "比较次数"
+
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:483
 msgid "Message"
 msgstr "消息"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:481
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:501
 msgid "filename filter condition"
 msgstr "文件名过滤条件"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:490
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:510
 msgid "Select manual"
 msgstr "手动选择"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:492
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:512
 msgid "select small file"
 msgstr "选择小文件"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:494
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:514
 msgid "select big file"
 msgstr "选择大文件"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:496
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:516
 msgid "select small image"
 msgstr "选择小画面文件"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:498
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:518
 msgid "select big image"
 msgstr "选择大画面文件"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:500
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:520
 msgid "select short video"
 msgstr "选择短视频"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:502
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:522
 msgid "select long video"
 msgstr "选择长视频"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:504
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:524
 msgid "select others"
 msgstr "反向选择"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:530
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:550
 #, fuzzy
 msgid "File Path"
 msgstr "文件路径"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:538
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:558
 msgid "Image Size"
 msgstr "图片尺寸"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:546
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:566
 msgid "File Size"
 msgstr "文件大小"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:554
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:574
 msgid "Video Length"
 msgstr "视频长度"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:562
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:582
 msgid "Format"
 msgstr "格式"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:600
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:620
 msgid "Choose Folder"
 msgstr "选择目录"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:669
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:696
 #, c-format
 msgid "find %d images to process"
 msgstr "找到%d张图片要处理"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:673
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:700
 #, c-format
 msgid "find %d groups same images"
 msgstr "找到%d组相同/相似图片"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:679
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:706
 #, c-format
 msgid "find %d videos to process"
 msgstr "找到%d个视频要处理"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:684
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:711
 #, c-format
 msgid "find %d groups same videos"
 msgstr "找到%d组相同/相似视频"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:873
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:900
 #, fuzzy
 msgid "Are you sure you want to quit fdupves?"
 msgstr "你确定要退出fdupves？"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:964
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:991
 msgid "process file"
 msgstr "处理文件"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:977
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1004
 msgid "open"
 msgstr "打开"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:988
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1015
 msgid "open dir"
 msgstr "打开目录"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:999
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1026
 msgid "delete"
 msgstr "删除"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:1010
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1037
 msgid "diff"
 msgstr "比较"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:1318
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1345
 #, fuzzy, c-format
 msgid "Are you sure you want to delete %s?"
 msgstr "你确定要删除%s？"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:1320
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1347
 msgid "Use this action for all the other files"
 msgstr "应用此操作到所有其它文件"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:1325
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1352
 msgid "move file to trash, but not really delete it"
 msgstr "移动文件到回收站，而不是真正删除它"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:1541
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1568
 msgid "From Tail"
 msgstr "从尾开始"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:1548
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1575
 msgid "Compare Count"
 msgstr "比较次数"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:1555
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1582
 msgid "Previous"
 msgstr "向前"
 
-#: /home/pengda/private/Nutstore/project/fdupves/src/gui.c:1559
+#: /home/p/private/Nutstore/project/fdupves/src/gui.c:1586
 msgid "Next"
 msgstr "向后"

@@ -88,10 +88,13 @@ main (int argc, char *argv[])
   CoInitializeEx (NULL, COINIT_MULTITHREADED);
 #endif
 
+#if GLIB_CHECK_VERSION(2, 32, 0)
+#else
   if (!g_thread_supported ())
     {
       g_thread_init (NULL);
     }
+#endif
   gdk_threads_init ();
 
   gtk_init (&argc, &argv);
