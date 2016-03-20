@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: acnchess 0.0.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2015-12-31 18:08+0000\n"
+"POT-Creation-Date: 2016-03-20 19:29+0800\n"
 "PO-Revision-Date: 2011-09-05 11:12+0800\n"
 "Last-Translator: Alf <naihe2010@126.com>\n"
 "Language-Team: Alf <naihe2010@126.com>\n"
@@ -39,7 +39,7 @@ msgstr "不能找到视频流：%s"
 msgid "Unsupported codec: %s"
 msgstr "不支持的格式：%s"
 
-#: /home/p/private/Nutstore/project/fdupves/src/video.c:277
+#: /home/p/private/Nutstore/project/fdupves/src/video.c:262
 msgid "Cannot initialize sws conversion context"
 msgstr "不能初使化转图形转化器"
 

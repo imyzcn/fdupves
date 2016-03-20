@@ -32,7 +32,7 @@
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
-#include <libavutil/frame.h>
+#include <libavutil/imgutils.h>
 
 #include <glib.h>
 
@@ -58,16 +58,16 @@ video_get_info (const char *file)
       return NULL;
     }
 
-  for(i=0, s = -1; i < (int) fmt_ctx->nb_streams; i++)
+  for (i=0, s = -1; i < (int) fmt_ctx->nb_streams; i++)
     {
-      if(fmt_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+      if (fmt_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
         {
 	  s = i;
 	  break;
         }
     }
 
-  if(s == -1)
+  if (s == -1)
     {
       g_warning (_ ("could not find video stream: %s"), file);
       avformat_close_input (&fmt_ctx);
@@ -131,7 +131,7 @@ video_time_screenshot (const char *file, int time,
   AVCodecContext *codec_ctx = NULL;
   AVCodec *codec = NULL;
   AVFrame *frame,*frame_rgb;
-  AVPacket packet;
+  AVPacket *packet;
   struct SwsContext *img_convert_ctx = NULL;
   int s, i, bytes, finished;
   int64_t seek_target;
@@ -152,7 +152,7 @@ video_time_screenshot (const char *file, int time,
   s = -1;
   for (i=0; i < (int) format_ctx->nb_streams; i++)
     {
-      if(format_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+      if (format_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
         {
 	  s = i;
 	  break;
@@ -183,50 +183,34 @@ video_time_screenshot (const char *file, int time,
       return -1;
     }
 
-#if FF_API_AVFRAME_LAVC
   frame = av_frame_alloc ();
-#else
-  frame = avcodec_alloc_frame ();
-#endif
   if (frame == NULL)
     {
       avcodec_close (codec_ctx);
       avformat_close_input (&format_ctx);
       return -1;
     }
-#if FF_API_AVFRAME_LAVC
   frame_rgb = av_frame_alloc ();
-#else
-  frame_rgb = avcodec_alloc_frame ();
-#endif
   if(frame_rgb == NULL)
     {
-#if FF_API_AVFRAME_LAVC
-#else
-      avcodec_free_frame (&frame);
-#endif
+      av_frame_free (&frame);
       avcodec_close (codec_ctx);
       avformat_close_input (&format_ctx);
       return -1;
     }
 
-  bytes = avpicture_get_size (PIX_FMT_RGB24, width, height);
+  bytes = av_image_get_buffer_size (AV_PIX_FMT_RGB24, width, height, width);
   if (buf_len < bytes)
     {
-#if FF_API_AVFRAME_LAVC
       av_frame_free (&frame);
       av_frame_free (&frame_rgb);
-#else
-      avcodec_free_frame (&frame);
-      avcodec_free_frame (&frame_rgb);
-#endif
       avcodec_close (codec_ctx);
       avformat_close_input (&format_ctx);
       return -1;
     }
-  avpicture_fill ((AVPicture *) frame_rgb, (uint8_t *) buffer,
-		  PIX_FMT_RGB24,
-		  width, height);
+  av_image_fill_arrays (frame_rgb->data, frame_rgb->linesize,
+                        (uint8_t *) buffer,
+                        AV_PIX_FMT_RGB24, width, height, 0);
 
   seek_target = av_rescale (time,
 			    format_ctx->streams[s]->time_base.den,
@@ -235,33 +219,46 @@ video_time_screenshot (const char *file, int time,
 		      0, seek_target, seek_target,
 		      AVSEEK_FLAG_FRAME);
 
-  while (av_read_frame (format_ctx, &packet) >= 0)
+  packet = av_packet_alloc ();
+  if (packet == NULL)
     {
-      if (packet.stream_index != s)
+      av_frame_free (&frame);
+      av_frame_free (&frame_rgb);
+      avcodec_close (codec_ctx);
+      avformat_close_input (&format_ctx);
+      return -1;
+    }
+
+  while (av_read_frame (format_ctx, packet) >= 0)
+    {
+      if (packet->stream_index != s)
 	{
-	  av_free_packet (&packet);
+          av_packet_unref (packet);
 	  continue;
 	}
 
-      avcodec_decode_video2 (codec_ctx, frame, &finished, &packet);
-      if (!finished) {
-	av_free_packet (&packet);
-	continue;
-      }
+      avcodec_decode_video2 (codec_ctx, frame, &finished, packet);
+      if (!finished)
+        {
+          av_packet_unref (packet);
+	  continue;
+        }
 
-      if (packet.dts != AV_NOPTS_VALUE)
+      if (packet->dts != AV_NOPTS_VALUE)
 	{
-	  if (packet.dts < seek_target)
+	  if (packet->dts < seek_target)
 	    {
-	      av_free_packet (&packet);
+              av_frame_unref (frame);
+              av_packet_unref (packet);
 	      continue;
 	    }
 	}
-      else if (packet.pts != AV_NOPTS_VALUE)
+      else if (packet->pts != AV_NOPTS_VALUE)
 	{
-	  if (packet.pts < seek_target)
+	  if (packet->pts < seek_target)
 	    {
-	      av_free_packet (&packet);
+              av_frame_unref (frame);
+              av_packet_unref (packet);
 	      continue;
 	    }
 	}
@@ -271,28 +268,28 @@ video_time_screenshot (const char *file, int time,
 			      codec_ctx->width, codec_ctx->height,
 			      codec_ctx->pix_fmt,
 			      width, height,
-			      PIX_FMT_RGB24, SWS_FAST_BILINEAR,
+			      AV_PIX_FMT_RGB24, SWS_FAST_BILINEAR,
 			      NULL, NULL, NULL);
-      if (!img_convert_ctx) {
-	g_warning (_ ("Cannot initialize sws conversion context"));
-	av_free_packet(&packet);
-	bytes = -1;
-	break;
-      }
+      if (!img_convert_ctx)
+        {
+          g_warning (_ ("Cannot initialize sws conversion context"));
+          bytes = -1;
+          break;
+        }
 
       sws_scale (img_convert_ctx,
 		 (const uint8_t * const *) frame->data, frame->linesize,
 		 0, codec_ctx->height,
 		 frame_rgb->data, frame_rgb->linesize);
       sws_freeContext (img_convert_ctx);
-      av_free_packet(&packet);
       break;
     }
 
-  av_free(frame_rgb);
-  av_free(frame);
+  av_packet_free (&packet);
+  av_free (frame_rgb);
+  av_free (frame);
 
-  avcodec_close(codec_ctx);
+  avcodec_close (codec_ctx);
 
   avformat_close_input (&format_ctx);
 
