@@ -4,7 +4,7 @@ PROJECT (fdupves "C")
 
 SET (PROJECT_MAJOR      "Klara")
 SET (PROJECT_MINOR      "0")
-SET (PROJECT_PATCH      "8")
+SET (PROJECT_PATCH      "9")
 SET (PROJECT_ICON       "wowgirls-klara.jpg")
 
 ADD_DEFINITIONS (
