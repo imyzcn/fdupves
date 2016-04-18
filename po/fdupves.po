@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: acnchess 0.0.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2016-03-20 19:29+0800\n"
+"POT-Creation-Date: 2016-04-18 16:17+0800\n"
 "PO-Revision-Date: 2011-09-05 11:12+0800\n"
 "Last-Translator: Alf <naihe2010@126.com>\n"
 "Language-Team: Alf <naihe2010@126.com>\n"
@@ -15,6 +15,22 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+
+#: /home/p/private/Nutstore/project/fdupves/src/find.c:82
+msgid "Generate image hash value"
+msgstr "生成图片哈希值"
+
+#: /home/p/private/Nutstore/project/fdupves/src/find.c:90
+msgid "Compare image hash value"
+msgstr "比较图片哈希值"
+
+#: /home/p/private/Nutstore/project/fdupves/src/find.c:142
+msgid "Generate video screenshot hash value"
+msgstr "生成视频截图哈希值"
+
+#: /home/p/private/Nutstore/project/fdupves/src/find.c:149
+msgid "Compare video screenshot hash value"
+msgstr "比较视频截图哈希值"
 
 #: /home/p/private/Nutstore/project/fdupves/src/video.c:50
 #: /home/p/private/Nutstore/project/fdupves/src/video.c:141
@@ -39,25 +55,9 @@ msgstr "不能找到视频流：%s"
 msgid "Unsupported codec: %s"
 msgstr "不支持的格式：%s"
 
-#: /home/p/private/Nutstore/project/fdupves/src/video.c:262
+#: /home/p/private/Nutstore/project/fdupves/src/video.c:275
 msgid "Cannot initialize sws conversion context"
 msgstr "不能初使化转图形转化器"
-
-#: /home/p/private/Nutstore/project/fdupves/src/find.c:82
-msgid "Generate image hash value"
-msgstr "生成图片哈希值"
-
-#: /home/p/private/Nutstore/project/fdupves/src/find.c:90
-msgid "Compare image hash value"
-msgstr "比较图片哈希值"
-
-#: /home/p/private/Nutstore/project/fdupves/src/find.c:142
-msgid "Generate video screenshot hash value"
-msgstr "生成视频截图哈希值"
-
-#: /home/p/private/Nutstore/project/fdupves/src/find.c:149
-msgid "Compare video screenshot hash value"
-msgstr "比较视频截图哈希值"
 
 #: /home/p/private/Nutstore/project/fdupves/src/gui.c:307
 msgid "Add"
@@ -109,29 +109,24 @@ msgid "Video"
 msgstr "视频"
 
 #: /home/p/private/Nutstore/project/fdupves/src/gui.c:462
-#, fuzzy
 msgid "Compare all"
-msgstr "比较次数"
+msgstr "比较整体"
 
 #: /home/p/private/Nutstore/project/fdupves/src/gui.c:463
-#, fuzzy
 msgid "Compare top"
-msgstr "比较次数"
+msgstr "比较顶部"
 
 #: /home/p/private/Nutstore/project/fdupves/src/gui.c:464
-#, fuzzy
 msgid "Compare bottom"
-msgstr "比较次数"
+msgstr "比较底部"
 
 #: /home/p/private/Nutstore/project/fdupves/src/gui.c:465
-#, fuzzy
 msgid "Compare left"
-msgstr "比较次数"
+msgstr "比较左边"
 
 #: /home/p/private/Nutstore/project/fdupves/src/gui.c:466
-#, fuzzy
 msgid "Compare right"
-msgstr "比较次数"
+msgstr "比较右边"
 
 #: /home/p/private/Nutstore/project/fdupves/src/gui.c:483
 msgid "Message"
@@ -174,7 +169,6 @@ msgid "select others"
 msgstr "反向选择"
 
 #: /home/p/private/Nutstore/project/fdupves/src/gui.c:550
-#, fuzzy
 msgid "File Path"
 msgstr "文件路径"
 
@@ -219,7 +213,6 @@ msgid "find %d groups same videos"
 msgstr "找到%d组相同/相似视频"
 
 #: /home/p/private/Nutstore/project/fdupves/src/gui.c:900
-#, fuzzy
 msgid "Are you sure you want to quit fdupves?"
 msgstr "你确定要退出fdupves？"
 
@@ -244,7 +237,7 @@ msgid "diff"
 msgstr "比较"
 
 #: /home/p/private/Nutstore/project/fdupves/src/gui.c:1345
-#, fuzzy, c-format
+#, c-format
 msgid "Are you sure you want to delete %s?"
 msgstr "你确定要删除%s？"
 

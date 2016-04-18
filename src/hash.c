@@ -216,7 +216,7 @@ video_time_hash (const char *file, int time)
   gchar *buffer;
   gsize len;
 #ifdef _DEBUG
-  gchar *basename, outfile[PATH_MAX];
+  gchar *basename, outfile[4096];
 #endif
 
   if (g_cache)

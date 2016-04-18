@@ -457,13 +457,13 @@ mainframe_new (gui_t *gui)
   typebox = gtk_hbox_new (TRUE, 2);
   gtk_box_pack_end (GTK_BOX (vbox), typebox, FALSE, FALSE, 2);
 
-  comparearea = gtk_combo_box_text_new ();
+  comparearea = gtk_combo_box_new_text ();
   gtk_box_pack_start (GTK_BOX (typebox), comparearea, FALSE, FALSE, 2);
-  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comparearea), _ ("Compare all"));
-  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comparearea), _ ("Compare top"));
-  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comparearea), _ ("Compare bottom"));
-  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comparearea), _ ("Compare left"));
-  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comparearea), _ ("Compare right"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (comparearea), _ ("Compare all"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (comparearea), _ ("Compare top"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (comparearea), _ ("Compare bottom"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (comparearea), _ ("Compare left"));
+  gtk_combo_box_append_text (GTK_COMBO_BOX (comparearea), _ ("Compare right"));
   g_signal_connect (G_OBJECT (comparearea), "changed", G_CALLBACK (gui_compareareacb), gui);
   gtk_combo_box_set_active (GTK_COMBO_BOX (comparearea), g_ini->compare_area);
 
